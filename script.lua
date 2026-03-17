@@ -19,6 +19,7 @@ local isMinimized = false
 local spaceHeld = false
 local isAnimating = false
 local hopActive = false
+local autoModeEnabled = false -- [MODIFICAÇÃO 1: VARIÁVEL NOVA]
 local boostPower = 28
 local itemSelecionado = nil
 local stealCache = {}
@@ -294,6 +295,11 @@ local function drag(o)
     end)
 end
 
+-- [MODIFICAÇÃO 3: DETECÇÃO DE NOTIFICAÇÃO]
+local function isBrainrotNotifying()
+    return notifyLabel.Text ~= ""
+end
+
 -- // Janela Auto Steal Selector
 local selectorFrame = Instance.new("Frame", screenGui)
 selectorFrame.Name = "AutoStealSelector"
@@ -386,7 +392,7 @@ end
 -- // Janela Server Hop
 local hopFrame = Instance.new("Frame", screenGui)
 hopFrame.Name = "ServerHopMenu"
-hopFrame.Size = UDim2.new(0, 180, 0, 220)
+hopFrame.Size = UDim2.new(0, 180, 0, 260) -- [Aumentado para caber o novo botão]
 hopFrame.Position = UDim2.new(0.05, 0, 0.5, -400)
 hopFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 hopFrame.Visible = false
@@ -464,6 +470,18 @@ stopBtn.Font = Enum.Font.GothamBold
 Instance.new("UICorner", stopBtn).CornerRadius = UDim.new(0, 8)
 stopBtn.ZIndex = 11
 applyRotatingLED(Instance.new("UIStroke", stopBtn))
+
+-- [MODIFICAÇÃO 2: BOTÃO MODO AUTOMATICO]
+local autoBtn = Instance.new("TextButton", hopFrame)
+autoBtn.Size = UDim2.new(0.85, 0, 0, 35)
+autoBtn.Position = UDim2.new(0.075, 0, 0, 205)
+autoBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+autoBtn.Text = "Modo Automático"
+autoBtn.TextColor3 = Color3.fromRGB(0, 255, 0)
+autoBtn.Font = Enum.Font.GothamBold
+Instance.new("UICorner", autoBtn).CornerRadius = UDim.new(0, 8)
+autoBtn.ZIndex = 11
+applyRotatingLED(Instance.new("UIStroke", autoBtn))
 
 -- // Botão Flutuante (Toggle Ball)
 local toggleBall = Instance.new("TextButton", screenGui)
@@ -669,6 +687,18 @@ stopBtn.MouseButton1Click:Connect(function()
     statusLabel.Text = "Status: Parado Imediatamente"; statusLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
 end)
 
+-- [MODIFICAÇÃO 6: BOTÃO ATIVAR / DESATIVAR AUTO MODE]
+autoBtn.MouseButton1Click:Connect(function()
+    autoModeEnabled = not autoModeEnabled
+
+    if autoModeEnabled then
+        statusLabel.Text = "Auto: Ligado"
+    else
+        hopActive = false
+        statusLabel.Text = "Auto: Desligado"
+    end
+end)
+
 -- // Loop Principal (Heartbeat)
 RunService.Heartbeat:Connect(function()
     if not scriptRunning then return end
@@ -751,6 +781,14 @@ task.spawn(function()
             end
             if value >= 10000000 and (os.clock() - lastNotify > 10) then
                 notifyLabel.Text = "💰 " .. best.name .. " | " .. best.income
+                
+                -- [MODIFICAÇÃO 4: MODIFICAR NOTIFICAÇÃO]
+                if autoModeEnabled then
+                    autoModeEnabled = false
+                    hopActive = false
+                    statusLabel.Text = "Auto: Brainrot detectado!"
+                end
+
                 notifySound:Play()
                 notifyLabel:TweenPosition(UDim2.new(0, 0, 0, 10), "Out", "Back", 0.5, true)
                 task.delay(5, function()
@@ -792,6 +830,25 @@ task.spawn(function()
     end
 end)
 
+-- [MODIFICAÇÃO 5: LOOP DO MODO AUTOMÁTICO]
+task.spawn(function()
+    while scriptRunning do
+        if autoModeEnabled then
+            hopActive = true
+            doServerHop()
+            task.wait(5)
+            if isBrainrotNotifying() then
+                autoModeEnabled = false
+                hopActive = false
+                statusLabel.Text = "Auto: Encontrado!"
+            else
+                statusLabel.Text = "Auto: Repetindo..."
+            end
+        end
+        task.wait(1)
+    end
+end)
+
 -- // Inicialização Final
 drag(mainFrame)
 drag(toggleBall)
@@ -800,6 +857,19 @@ drag(hopFrame)
 
 loadSettings()
 loadBlacklist()
+
+-- [MODIFICAÇÃO 7: ESCONDER ERROS DE TELEPORTE]
+game:GetService("TeleportService").TeleportInitFailed:Connect(function()
+    task.spawn(function()
+        for _, gui in pairs(playerGui:GetDescendants()) do
+            if gui:IsA("TextLabel") and gui.Text:lower():find("error") then
+                gui.Visible = true
+                task.wait(1)
+                gui.Visible = false
+            end
+        end
+    end)
+end)
 
 task.wait(1)
 toggleMenu()
