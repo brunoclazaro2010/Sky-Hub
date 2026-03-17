@@ -1,7 +1,3 @@
--- LocalScript: Menu SKY HUB (V2.3.1 - ESP & WALL COLLISION FIX) -- PlaceId: 109983668079237
--- ==========================================
--- SERVIÇOS
--- ==========================================
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -9,9 +5,7 @@ local RunService = game:GetService("RunService")
 local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
 
--- ==========================================
--- VARIÁVEIS TÉCNICAS E DE CONTROLE
--- ==========================================
+-- // Variáveis de Estado
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local scriptRunning = true
@@ -20,12 +14,13 @@ local speedBoostEnabled = false
 local autoStealEnabled = false
 local antiRagdollEnabled = false
 local serverHopEnabled = false
+local autoHopEnabled = false          -- NOVO: Modo Automático
 local menuOpen = false
 local isMinimized = false
 local spaceHeld = false
 local isAnimating = false
 local hopActive = false
-local autoModeEnabled = false  -- ← NOVO
+local lastNotificationTime = 0        -- NOVO: para detectar notificações recentes
 local boostPower = 28
 local itemSelecionado = nil
 local stealCache = {}
@@ -34,9 +29,7 @@ local rotatingGradients = {}
 local targetRotation = 0
 local espGui
 
--- ==========================================
--- SISTEMA DE SAVE
--- ==========================================
+-- // Sistema de Arquivos e Configurações
 local folderName = "SkyHub"
 local fileName = folderName .. "/Config.json"
 if makefolder and not isfolder(folderName) then makefolder(folderName) end
@@ -49,33 +42,24 @@ local function saveSettings()
         autoSteal = autoStealEnabled,
         antiRagdoll = antiRagdollEnabled,
         serverHop = serverHopEnabled,
-        autoMode = autoModeEnabled,  -- ← NOVO
         hopValue = (hopTextBox and hopTextBox.Text) or ""
     }
     writefile(fileName, HttpService:JSONEncode(config))
 end
 
--- ==========================================
--- SERVER BLACKLIST SYSTEM
--- ==========================================
+-- // Sistema de Blacklist de Servidores
 local blacklistFile = folderName .. "/ServerBlacklist.json"
 local serverBlacklist = {}
 
 local function loadBlacklist()
     if isfile and isfile(blacklistFile) then
-        local success, data = pcall(function()
-            return HttpService:JSONDecode(readfile(blacklistFile))
-        end)
-        if success and type(data) == "table" then
-            serverBlacklist = data
-        end
+        local success, data = pcall(function() return HttpService:JSONDecode(readfile(blacklistFile)) end)
+        if success and type(data) == "table" then serverBlacklist = data end
     end
 end
 
 local function saveBlacklist()
-    if writefile then
-        writefile(blacklistFile, HttpService:JSONEncode(serverBlacklist))
-    end
+    if writefile then writefile(blacklistFile, HttpService:JSONEncode(serverBlacklist)) end
 end
 
 local function addServerToBlacklist(id)
@@ -86,15 +70,13 @@ local function addServerToBlacklist(id)
 end
 
 local function isBlacklisted(id)
-    for _,v in pairs(serverBlacklist) do
+    for _, v in pairs(serverBlacklist) do
         if v == id then return true end
     end
     return false
 end
 
--- ==========================================
--- INICIALIZAÇÃO DA UI
--- ==========================================
+-- // Interface Base (UI)
 local oldGui = playerGui:FindFirstChild("DarkGeminiMenu")
 if oldGui then oldGui:Destroy() end
 
@@ -118,9 +100,7 @@ notifyLabel.TextSize = 16
 notifyLabel.Text = ""
 Instance.new("UIStroke", notifyLabel).Color = Color3.fromRGB(255, 215, 0)
 
--- ==========================================
--- FUNÇÕES DE SUPORTE E LÓGICA
--- ==========================================
+-- // Funções Utilitárias de Cálculo
 local function parseValue(text)
     text = text:lower()
     local num = tonumber(text:match("[%d%.]+"))
@@ -138,6 +118,7 @@ local function formatValue(n)
     else return tostring(n) end
 end
 
+-- // Lógica de Detecção de "Brainrot"
 local function getBestBrainrot()
     local highest = 0
     local bestData = nil
@@ -152,11 +133,7 @@ local function getBestBrainrot()
                         local num = parseValue(text)
                         if num > highest then
                             highest = num
-                            bestData = {
-                                overhead = obj,
-                                income = income,
-                                name = name or "Brainrot",
-                            }
+                            bestData = { overhead = obj, income = income, name = name or "Brainrot" }
                         end
                     elseif not text:find("%$") and text ~= "STOLEN" and #text > 2 then
                         name = text
@@ -186,16 +163,22 @@ local function getHighestValue()
     return highest
 end
 
+-- // Lógica de Server Hop
 local function doServerHop()
     if not hopActive then return end
     statusLabel.Text = "Status: Iniciando busca..."
+    clearStatusAfter(1)  -- limpa após 1s
+
     local placeId = game.PlaceId
     local url = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Asc&limit=100"
     local success, content = pcall(function() return game:HttpGet(url) end)
+   
     if not success or not content or not hopActive then
         statusLabel.Text = "Status: Erro ou Parado"
+        clearStatusAfter(1)
         return
     end
+   
     local decoded = HttpService:JSONDecode(content)
     if decoded and decoded.data then
         for _, server in ipairs(decoded.data) do
@@ -203,23 +186,22 @@ local function doServerHop()
             if server.playing < server.maxPlayers and server.id ~= game.JobId and not isBlacklisted(server.id) then
                 addServerToBlacklist(server.id)
                 statusLabel.Text = "Status: Teleportando..."
-                pcall(function()
-                    TeleportService:TeleportToPlaceInstance(placeId, server.id, player)
-                end)
+                clearStatusAfter(1)
+                pcall(function() TeleportService:TeleportToPlaceInstance(placeId, server.id, player) end)
                 task.wait(2)
             end
         end
-        if hopActive then
+        if hopActive then 
             statusLabel.Text = "Status: Nenhum serv. livre"
+            clearStatusAfter(1)
         end
     else
         statusLabel.Text = "Status: Lista vazia"
+        clearStatusAfter(1)
     end
 end
 
--- ==========================================
--- EFEITOS VISUAIS
--- ==========================================
+-- // Efeitos Visuais
 local function applyShine(target)
     local grad = Instance.new("UIGradient", target)
     grad.Color = ColorSequence.new({
@@ -277,9 +259,7 @@ local function createBrainrotESP(data)
     return billboard
 end
 
--- ==========================================
--- SISTEMA DE INTERAÇÃO (DRAG & TOGGLE)
--- ==========================================
+-- // Helpers da Interface
 local function handleToggle(btn, circle, state)
     TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = state and Color3.fromRGB(255, 215, 0) or Color3.fromRGB(50, 50, 50)}):Play()
     TweenService:Create(circle, TweenInfo.new(0.2), {Position = state and UDim2.new(1, -23, 0.5, -10) or UDim2.new(0, 3, 0.5, -10)}):Play()
@@ -289,9 +269,7 @@ local function drag(o)
     local dragging, dragInput, dragStart, startPos
     o.InputBegan:Connect(function(input)
         if scriptRunning and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
-            dragging = true
-            dragStart = input.Position
-            startPos = o.Position
+            dragging = true; dragStart = input.Position; startPos = o.Position
         end
     end)
     o.InputChanged:Connect(function(input)
@@ -312,9 +290,17 @@ local function drag(o)
     end)
 end
 
--- ==========================================
--- AUTO STEAL SELECTOR
--- ==========================================
+-- // Função para limpar status após X segundos
+local function clearStatusAfter(seconds)
+    task.delay(seconds, function()
+        if statusLabel.Text:find("Erro") or statusLabel.Text:find("Nenhum") or statusLabel.Text:find("Lista vazia") or statusLabel.Text:find("Parado") or statusLabel.Text:find("Aguardando") then
+            statusLabel.Text = "Status: Aguardando"
+            statusLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+        end
+    end)
+end
+
+-- // Janela Auto Steal Selector
 local selectorFrame = Instance.new("Frame", screenGui)
 selectorFrame.Name = "AutoStealSelector"
 selectorFrame.Size = UDim2.new(0, 180, 0, 220)
@@ -328,7 +314,6 @@ selStroke.Thickness = 5
 selStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 selStroke.Color = Color3.fromRGB(255, 255, 255)
 applyRotatingLED(selStroke)
-
 local selTitle = Instance.new("TextLabel", selectorFrame)
 selTitle.Size = UDim2.new(1, 0, 0, 30)
 selTitle.Text = "AUTO STEAL SELECTER"
@@ -339,7 +324,6 @@ selTitle.BackgroundTransparency = 1
 selTitle.AutoLocalize = false
 applyShine(selTitle)
 selTitle.ZIndex = 6
-
 local scrollList = Instance.new("ScrollingFrame", selectorFrame)
 scrollList.Size = UDim2.new(0.9, 0, 0.75, 0)
 scrollList.Position = UDim2.new(0.05, 0, 0.18, 0)
@@ -347,7 +331,6 @@ scrollList.BackgroundTransparency = 1
 scrollList.ScrollBarThickness = 4
 scrollList.AutomaticCanvasSize = Enum.AutomaticSize.Y
 scrollList.ZIndex = 6
-
 local listLayout = Instance.new("UIListLayout", scrollList)
 listLayout.Padding = UDim.new(0, 6)
 
@@ -359,8 +342,7 @@ local function atualizarLista()
         if d:IsA("ProximityPrompt") then
             local actionText = d.ActionText:lower()
             local objectText = d.ObjectText:lower()
-            if (actionText:find("steal") or objectText:find("brainrot") or actionText:find("pegar") or actionText:find("roubar"))
-            and not (objectText:find("dealer") or objectText:find("trader")) then
+            if (actionText:find("steal") or objectText:find("brainrot") or actionText:find("pegar") or actionText:find("roubar")) and not (objectText:find("dealer") or objectText:find("trader")) then
                 table.insert(newCache, d)
                 local id = d:GetDebugId()
                 itensNoMapa[id] = true
@@ -376,19 +358,17 @@ local function atualizarLista()
                     Instance.new("UICorner", b)
                     b.AutoLocalize = false
                     b.ZIndex = 7
+                   
                     local bStroke = Instance.new("UIStroke", b)
                     bStroke.Name = "SelectionBorder"
                     bStroke.Thickness = 2
                     bStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
                     bStroke.Color = Color3.fromRGB(255, 215, 0)
                     bStroke.Enabled = (itemSelecionado == d)
+                   
                     b.MouseButton1Click:Connect(function()
                         if not scriptRunning then return end
-                        if itemSelecionado == d then
-                            itemSelecionado = nil
-                        else
-                            itemSelecionado = d
-                        end
+                        if itemSelecionado == d then itemSelecionado = nil else itemSelecionado = d end
                         for _, child in pairs(scrollList:GetChildren()) do
                             if child:IsA("TextButton") and child:FindFirstChild("SelectionBorder") then
                                 child.SelectionBorder.Enabled = (itemSelecionado and child.Name == itemSelecionado:GetDebugId())
@@ -401,30 +381,24 @@ local function atualizarLista()
     end
     stealCache = newCache
     for _, child in pairs(scrollList:GetChildren()) do
-        if child:IsA("TextButton") and not itensNoMapa[child.Name] then
-            child:Destroy()
-        end
+        if child:IsA("TextButton") and not itensNoMapa[child.Name] then child:Destroy() end
     end
 end
 
--- ==========================================
--- SERVER HOP UI
--- ==========================================
+-- // Janela Server Hop (aumentado para caber o novo botão)
 local hopFrame = Instance.new("Frame", screenGui)
 hopFrame.Name = "ServerHopMenu"
-hopFrame.Size = UDim2.new(0, 180, 0, 270)  -- ← Aumentado para caber o novo botão
+hopFrame.Size = UDim2.new(0, 180, 0, 270)  -- Aumentado
 hopFrame.Position = UDim2.new(0.05, 0, 0.5, -400)
 hopFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 hopFrame.Visible = false
 Instance.new("UICorner", hopFrame).CornerRadius = UDim.new(0, 10)
 hopFrame.ZIndex = 10
-
 local hopStroke = Instance.new("UIStroke", hopFrame)
 hopStroke.Thickness = 4
 hopStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 hopStroke.Color = Color3.fromRGB(255, 255, 255)
 applyRotatingLED(hopStroke)
-
 local hopTitle = Instance.new("TextLabel", hopFrame)
 hopTitle.Size = UDim2.new(1, 0, 0, 35)
 hopTitle.Text = "SERVER HOP"
@@ -434,7 +408,6 @@ hopTitle.TextSize = 14
 hopTitle.BackgroundTransparency = 1
 hopTitle.ZIndex = 11
 applyShine(hopTitle)
-
 statusLabel = Instance.new("TextLabel", hopFrame)
 statusLabel.Size = UDim2.new(1, 0, 0, 20)
 statusLabel.Position = UDim2.new(0, 0, 0, 38)
@@ -444,19 +417,16 @@ statusLabel.Font = Enum.Font.GothamBold
 statusLabel.TextSize = 10
 statusLabel.BackgroundTransparency = 1
 statusLabel.ZIndex = 11
-
 local inputFrame = Instance.new("Frame", hopFrame)
 inputFrame.Size = UDim2.new(0.85, 0, 0, 30)
 inputFrame.Position = UDim2.new(0.075, 0, 0, 60)
 inputFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
 Instance.new("UICorner", inputFrame).CornerRadius = UDim.new(0, 8)
 inputFrame.ZIndex = 11
-
 local inputStroke = Instance.new("UIStroke", inputFrame)
 inputStroke.Thickness = 2
 inputStroke.Color = Color3.fromRGB(255, 255, 255)
 applyRotatingLED(inputStroke)
-
 hopTextBox = Instance.new("TextBox", inputFrame)
 hopTextBox.Size = UDim2.new(1, -10, 1, 0)
 hopTextBox.Position = UDim2.new(0, 5, 0, 0)
@@ -478,10 +448,7 @@ startBtn.TextColor3 = Color3.fromRGB(255, 215, 0)
 startBtn.Font = Enum.Font.GothamBold
 Instance.new("UICorner", startBtn).CornerRadius = UDim.new(0, 8)
 startBtn.ZIndex = 11
-
-local startStroke = Instance.new("UIStroke", startBtn)
-startStroke.Thickness = 3
-applyRotatingLED(startStroke)
+applyRotatingLED(Instance.new("UIStroke", startBtn))
 
 local stopBtn = Instance.new("TextButton", hopFrame)
 stopBtn.Size = UDim2.new(0.85, 0, 0, 35)
@@ -492,52 +459,33 @@ stopBtn.TextColor3 = Color3.fromRGB(255, 0, 0)
 stopBtn.Font = Enum.Font.GothamBold
 Instance.new("UICorner", stopBtn).CornerRadius = UDim.new(0, 8)
 stopBtn.ZIndex = 11
-
-local stopStroke = Instance.new("UIStroke", stopBtn)
-stopStroke.Thickness = 3
-applyRotatingLED(stopStroke)
+applyRotatingLED(Instance.new("UIStroke", stopBtn))
 
 -- NOVO BOTÃO MODO AUTOMÁTICO
 local autoBtn = Instance.new("TextButton", hopFrame)
-autoBtn.Name = "AutoModeBtn"
 autoBtn.Size = UDim2.new(0.85, 0, 0, 35)
 autoBtn.Position = UDim2.new(0.075, 0, 0, 200)
 autoBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-autoBtn.Text = "Modo Automático"
-autoBtn.TextColor3 = Color3.fromRGB(255, 215, 0)
+autoBtn.Text = "🔄 Modo Automático"
+autoBtn.TextColor3 = Color3.fromRGB(0, 255, 255)
 autoBtn.Font = Enum.Font.GothamBold
+autoBtn.TextSize = 14
 Instance.new("UICorner", autoBtn).CornerRadius = UDim.new(0, 8)
 autoBtn.ZIndex = 11
+applyRotatingLED(Instance.new("UIStroke", autoBtn))
 
-local autoStroke = Instance.new("UIStroke", autoBtn)
-autoStroke.Thickness = 3
-applyRotatingLED(autoStroke)
-
-local function handleAutoModeToggle()
-    if autoModeEnabled then
-        autoBtn.Text = "Modo Automático: ATIVADO"
-        autoBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
-    else
-        autoBtn.Text = "Modo Automático"
-        autoBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-    end
-end
-
--- ==========================================
--- MENU PRINCIPAL E BOTÕES
--- ==========================================
+-- // Botão Flutuante (Toggle Ball)
 local toggleBall = Instance.new("TextButton", screenGui)
 toggleBall.Size = UDim2.new(0, 45, 0, 45)
 toggleBall.Position = UDim2.new(0.8, 70, 0.5, -190)
 toggleBall.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 toggleBall.Text = ""
 Instance.new("UICorner", toggleBall).CornerRadius = UDim.new(1, 0)
+toggleBall.ZIndex = 20
 local ballStroke = Instance.new("UIStroke", toggleBall)
 ballStroke.Thickness = 3
 ballStroke.Color = Color3.fromRGB(255, 255, 255)
 applyRotatingLED(ballStroke)
-toggleBall.ZIndex = 20
-
 local cloudIcon = Instance.new("TextLabel", toggleBall)
 cloudIcon.Size = UDim2.new(1, 0, 1, 0)
 cloudIcon.BackgroundTransparency = 1
@@ -548,6 +496,7 @@ cloudIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 cloudIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
 cloudIcon.ZIndex = 21
 
+-- // Janela Principal
 local mainFrame = Instance.new("Frame", screenGui)
 mainFrame.Size = UDim2.new(0, 400, 0, 350)
 mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -557,12 +506,10 @@ mainFrame.ClipsDescendants = true
 Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 12)
 mainFrame.Visible = false
 mainFrame.ZIndex = 30
-
 local mainStroke = Instance.new("UIStroke", mainFrame)
 mainStroke.Thickness = 6
 mainStroke.Color = Color3.fromRGB(255, 255, 255)
 applyRotatingLED(mainStroke)
-
 local titleLabel = Instance.new("TextLabel", mainFrame)
 titleLabel.Size = UDim2.new(0, 200, 0, 40)
 titleLabel.Position = UDim2.new(0, 15, 0, 0)
@@ -574,7 +521,6 @@ titleLabel.TextSize = 20
 titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 applyShine(titleLabel)
 titleLabel.ZIndex = 31
-
 local speedDisplay = Instance.new("TextLabel", mainFrame)
 speedDisplay.Size = UDim2.new(0, 150, 0, 20)
 speedDisplay.Position = UDim2.new(0, 150, 0, 10)
@@ -585,7 +531,6 @@ speedDisplay.Font = Enum.Font.GothamMedium
 speedDisplay.TextSize = 14
 speedDisplay.TextXAlignment = Enum.TextXAlignment.Left
 speedDisplay.ZIndex = 31
-
 local separatorLine = Instance.new("Frame", mainFrame)
 separatorLine.Size = UDim2.new(1, 0, 0, 4)
 separatorLine.Position = UDim2.new(0, 0, 0, 40)
@@ -603,7 +548,6 @@ local function createOption(name, yPos)
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.TextColor3 = Color3.fromRGB(255, 215, 0)
     label.ZIndex = 32
-
     local base = Instance.new("TextButton", mainFrame)
     base.Size = UDim2.new(0, 50, 0, 26)
     base.Position = UDim2.new(0, 320, 0, yPos + 2)
@@ -611,14 +555,12 @@ local function createOption(name, yPos)
     base.Text = ""
     Instance.new("UICorner", base).CornerRadius = UDim.new(1, 0)
     base.ZIndex = 32
-
     local circle = Instance.new("Frame", base)
     circle.Size = UDim2.new(0, 20, 0, 20)
     circle.Position = UDim2.new(0, 3, 0.5, -10)
     circle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     Instance.new("UICorner", circle).CornerRadius = UDim.new(1, 0)
     circle.ZIndex = 33
-
     return base, circle
 end
 
@@ -628,17 +570,19 @@ local speedBtn, speedCirc = createOption("Speed Boost", 180)
 local ragBtn, ragCirc = createOption("Anti Ragdoll", 220)
 local hopBtn, hopCirc = createOption("Server Hop", 260)
 
+-- // Funções de Controle de Janela
 local function toggleMenu()
     if not scriptRunning or isAnimating then return end
     isAnimating = true
     menuOpen = not menuOpen
     targetRotation = targetRotation + 360
     TweenService:Create(cloudIcon, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Rotation = targetRotation}):Play()
+   
     if menuOpen then
         mainFrame.Visible = true
         mainFrame:TweenSize(isMinimized and UDim2.new(0, 400, 0, 40) or UDim2.new(0, 400, 0, 350), "Out", "Back", 0.4, true, function() isAnimating = false end)
     else
-        mainFrame:TweenSize(UDim2.new(0, 0, 0, 0), "In", "Quad", 0.3, true, function() mainFrame.Visible = false isAnimating = false end)
+        mainFrame:TweenSize(UDim2.new(0, 0, 0, 0), "In", "Quad", 0.3, true, function() mainFrame.Visible = false; isAnimating = false end)
     end
 end
 
@@ -677,71 +621,26 @@ end)
 
 toggleBall.MouseButton1Click:Connect(toggleMenu)
 
--- ==========================================
--- CARREGAMENTO E EVENTOS
--- ==========================================
+-- // Carregamento e Conexões de Botões
 local function loadSettings()
     if isfile and isfile(fileName) then
-        local success, data = pcall(function()
-            return HttpService:JSONDecode(readfile(fileName))
-        end)
+        local success, data = pcall(function() return HttpService:JSONDecode(readfile(fileName)) end)
         if success then
-            infJumpEnabled = data.infJump or false
-            handleToggle(infBtn, infCirc, infJumpEnabled)
-
-            speedBoostEnabled = data.speedBoost or false
-            handleToggle(speedBtn, speedCirc, speedBoostEnabled)
-
-            autoStealEnabled = data.autoSteal or false
-            handleToggle(stealBtn, stealCirc, autoStealEnabled)
-            selectorFrame.Visible = autoStealEnabled
-
-            antiRagdollEnabled = data.antiRagdoll or false
-            handleToggle(ragBtn, ragCirc, antiRagdollEnabled)
-
-            serverHopEnabled = data.serverHop or false
-            handleToggle(hopBtn, hopCirc, serverHopEnabled)
-            hopFrame.Visible = serverHopEnabled
-
-            autoModeEnabled = data.autoMode or false  -- ← NOVO
-            handleAutoModeToggle()
-
+            infJumpEnabled = data.infJump; handleToggle(infBtn, infCirc, infJumpEnabled)
+            speedBoostEnabled = data.speedBoost; handleToggle(speedBtn, speedCirc, speedBoostEnabled)
+            autoStealEnabled = data.autoSteal; handleToggle(stealBtn, stealCirc, autoStealEnabled); selectorFrame.Visible = autoStealEnabled
+            antiRagdollEnabled = data.antiRagdoll; handleToggle(ragBtn, ragCirc, antiRagdollEnabled)
+            serverHopEnabled = data.serverHop; handleToggle(hopBtn, hopCirc, serverHopEnabled); hopFrame.Visible = serverHopEnabled
             hopTextBox.Text = data.hopValue or ""
         end
     end
 end
 
-infBtn.MouseButton1Click:Connect(function()
-    infJumpEnabled = not infJumpEnabled
-    handleToggle(infBtn, infCirc, infJumpEnabled)
-    saveSettings()
-end)
-
-stealBtn.MouseButton1Click:Connect(function()
-    autoStealEnabled = not autoStealEnabled
-    handleToggle(stealBtn, stealCirc, autoStealEnabled)
-    selectorFrame.Visible = autoStealEnabled
-    saveSettings()
-end)
-
-speedBtn.MouseButton1Click:Connect(function()
-    speedBoostEnabled = not speedBoostEnabled
-    handleToggle(speedBtn, speedCirc, speedBoostEnabled)
-    saveSettings()
-end)
-
-ragBtn.MouseButton1Click:Connect(function()
-    antiRagdollEnabled = not antiRagdollEnabled
-    handleToggle(ragBtn, ragCirc, antiRagdollEnabled)
-    saveSettings()
-end)
-
-hopBtn.MouseButton1Click:Connect(function()
-    serverHopEnabled = not serverHopEnabled
-    handleToggle(hopBtn, hopCirc, serverHopEnabled)
-    hopFrame.Visible = serverHopEnabled
-    saveSettings()
-end)
+infBtn.MouseButton1Click:Connect(function() infJumpEnabled = not infJumpEnabled; handleToggle(infBtn, infCirc, infJumpEnabled); saveSettings() end)
+stealBtn.MouseButton1Click:Connect(function() autoStealEnabled = not autoStealEnabled; handleToggle(stealBtn, stealCirc, autoStealEnabled); selectorFrame.Visible = autoStealEnabled; saveSettings() end)
+speedBtn.MouseButton1Click:Connect(function() speedBoostEnabled = not speedBoostEnabled; handleToggle(speedBtn, speedCirc, speedBoostEnabled); saveSettings() end)
+ragBtn.MouseButton1Click:Connect(function() antiRagdollEnabled = not antiRagdollEnabled; handleToggle(ragBtn, ragCirc, antiRagdollEnabled); saveSettings() end)
+hopBtn.MouseButton1Click:Connect(function() serverHopEnabled = not serverHopEnabled; handleToggle(hopBtn, hopCirc, serverHopEnabled); hopFrame.Visible = serverHopEnabled; saveSettings() end)
 
 hopTextBox:GetPropertyChangedSignal("Text"):Connect(function()
     hopTextBox.Text = hopTextBox.Text:gsub("%D+", "")
@@ -751,53 +650,87 @@ end)
 startBtn.MouseButton1Click:Connect(function()
     hopActive = true
     local target = tonumber(hopTextBox.Text)
-    if not target then
-        statusLabel.Text = "Status: Digite um valor!"
-        return
-    end
-    statusLabel.Text = "Status: Verificando..."
-    statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    if not target then statusLabel.Text = "Status: Digite um valor!"; clearStatusAfter(1); return end
+    statusLabel.Text = "Status: Verificando..."; statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    clearStatusAfter(1)
     task.wait(1)
     if not hopActive then return end
     local maxFound = getHighestValue()
     if maxFound >= target then
         statusLabel.Text = "Alvo " .. formatValue(target) .. "+ Detectado!"
         statusLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+        clearStatusAfter(2)
     else
-        statusLabel.Text = "Status: Pulando servidor..."
-        statusLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+        statusLabel.Text = "Status: Pulando servidor..."; statusLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+        clearStatusAfter(1)
         doServerHop()
     end
 end)
 
 stopBtn.MouseButton1Click:Connect(function()
     hopActive = false
-    statusLabel.Text = "Status: Parado Imediatamente"
-    statusLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+    statusLabel.Text = "Status: Parado Imediatamente"; statusLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+    clearStatusAfter(1)
 end)
 
--- Novo: clique no Modo Automático
+-- Conexão do botão Modo Automático
 autoBtn.MouseButton1Click:Connect(function()
-    if not scriptRunning then return end
-    autoModeEnabled = not autoModeEnabled
-    handleAutoModeToggle()
-    saveSettings()
-
-    if autoModeEnabled then
+    autoHopEnabled = not autoHopEnabled
+    
+    if autoHopEnabled then
+        autoBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+        autoBtn.Text = "🔄 AUTO ATIVADO ✓"
         hopActive = true
-        statusLabel.Text = "🔄 Iniciando Modo Automático..."
-        statusLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
-        doServerHop()
+        statusLabel.Text = "🔄 Modo Automático LIGADO"
+        statusLabel.TextColor3 = Color3.fromRGB(0, 255, 255)
+        clearStatusAfter(1)
+        task.spawn(autoHopLoop)
     else
+        autoBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+        autoBtn.Text = "🔄 Modo Automático"
         hopActive = false
-        statusLabel.Text = "Status: Modo Automático parado"
+        statusLabel.Text = "Modo Auto DESLIGADO"
         statusLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+        clearStatusAfter(1)
     end
 end)
 
--- ==========================================
--- LOOPS E MONITORAMENTO
--- ==========================================
+-- ====================== LOOP DO MODO AUTOMÁTICO ======================
+local function autoHopLoop()
+    while autoHopEnabled and scriptRunning do
+        local best = getBestBrainrot()
+        if best and parseValue(best.income or "") >= 10000000 then
+            autoHopEnabled = false
+            hopActive = false
+            autoBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+            autoBtn.Text = "🔄 Modo Automático"
+            statusLabel.Text = "🛑 Brainrot detectado! Auto DESLIGADO"
+            statusLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+            clearStatusAfter(2)
+            break
+        end
+
+        statusLabel.Text = "🔄 Buscando servidor novo..."
+        statusLabel.TextColor3 = Color3.fromRGB(0, 255, 255)
+        clearStatusAfter(1)
+        doServerHop()
+
+        for i = 5, 1, -1 do
+            if not autoHopEnabled then break end
+            statusLabel.Text = "⏳ Aguardando " .. i .. "s para próximo hop..."
+            task.wait(1)
+        end
+
+        if autoHopEnabled then
+            statusLabel.Text = "🔄 Iniciando próximo hop automático..."
+            clearStatusAfter(1)
+        else
+            break
+        end
+    end
+end
+
+-- // Loop Principal (Heartbeat)
 RunService.Heartbeat:Connect(function()
     if not scriptRunning then return end
     local t = os.clock()
@@ -805,7 +738,6 @@ RunService.Heartbeat:Connect(function()
     for _, g in pairs(rotatingGradients) do g.Rotation = rot end
     local shineOffset = Vector2.new(-0.8 + (t * 0.4 % 1.6), 0)
     for _, g in pairs(shineGradients) do g.Offset = shineOffset end
-
     local char = player.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -851,44 +783,12 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- SISTEMA INTELIGENTE COM RESET DE VALOR + MODO AUTOMÁTICO
+-- // Loop de Detecção de Brainrot e Notificações
 local currentBrainrotValue = 0
 local lastNotify = 0
 task.spawn(function()
     while scriptRunning do
         local best = getBestBrainrot()
-
-        -- ==================== MODO AUTOMÁTICO ====================
-        if autoModeEnabled then
-            local highest = getHighestValue()
-            if highest >= 10000000 then
-                -- ACHOU 10M+ → PARA TUDO
-                autoModeEnabled = false
-                hopActive = false
-                handleAutoModeToggle()
-                saveSettings()
-
-                statusLabel.Text = "✅ 10M+ ENCONTRADO! Modo Auto DESATIVADO"
-                statusLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
-
-                notifyLabel.Text = "🎉 Brainrot 10M+ encontrado! Parando auto-hop..."
-                notifySound:Play()
-                notifyLabel:TweenPosition(UDim2.new(0,0,0,10), "Out", "Back", 0.5, true)
-                task.delay(5, function()
-                    notifyLabel:TweenPosition(UDim2.new(0,0,0,-40), "In", "Quad", 0.5, true)
-                    notifyLabel.Text = ""
-                end)
-            else
-                -- Não tem 10M → continua pulando automaticamente
-                if not hopActive then
-                    hopActive = true
-                    statusLabel.Text = "🔄 Modo Auto: Pulando servidor..."
-                    doServerHop()
-                end
-            end
-        end
-        -- ========================================================
-
         if best then
             local value = parseValue(best.income)
             local needNewESP = false
@@ -900,13 +800,22 @@ task.spawn(function()
                 espGui = createBrainrotESP(best)
                 currentBrainrotValue = value
             end
-            -- NOTIFICAÇÃO
             if value >= 10000000 and (os.clock() - lastNotify > 10) then
                 notifyLabel.Text = "💰 " .. best.name .. " | " .. best.income
                 notifySound:Play()
-                notifyLabel:TweenPosition( UDim2.new(0,0,0,10), "Out", "Back", 0.5, true )
-                task.delay(5,function()
-                    notifyLabel:TweenPosition( UDim2.new(0,0,0,-40), "In", "Quad", 0.5, true )
+                notifyLabel:TweenPosition(UDim2.new(0, 0, 0, 10), "Out", "Back", 0.5, true)
+                -- DESLIGA MODO AUTO SE DETECTAR BRAINROT ALTO
+                if autoHopEnabled then
+                    autoHopEnabled = false
+                    hopActive = false
+                    autoBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+                    autoBtn.Text = "🔄 Modo Automático"
+                    statusLabel.Text = "🛑 Brainrot detectado! Auto DESLIGADO"
+                    statusLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+                    clearStatusAfter(2)
+                end
+                task.delay(5, function()
+                    notifyLabel:TweenPosition(UDim2.new(0, 0, 0, -40), "In", "Quad", 0.5, true)
                     notifyLabel.Text = ""
                 end)
                 lastNotify = os.clock()
@@ -919,9 +828,7 @@ task.spawn(function()
     end
 end)
 
--- ==========================================
--- INPUTS FINAIS E EXECUÇÃO
--- ==========================================
+-- // Input Events
 UserInputService.JumpRequest:Connect(function()
     if scriptRunning and infJumpEnabled then
         spaceHeld = true
@@ -938,6 +845,7 @@ UserInputService.InputBegan:Connect(function(i, g)
     end
 end)
 
+-- // Loop de Atualização da Lista de Itens
 task.spawn(function()
     while scriptRunning do
         atualizarLista()
@@ -945,13 +853,12 @@ task.spawn(function()
     end
 end)
 
+-- // Inicialização Final
 drag(mainFrame)
 drag(toggleBall)
 drag(selectorFrame)
 drag(hopFrame)
-
 loadSettings()
 loadBlacklist()
-handleAutoModeToggle()  -- ← Garante visual correto ao carregar
 task.wait(1)
 toggleMenu()
