@@ -881,21 +881,33 @@ task.spawn(function()
             local coreGui = game:GetService("CoreGui")
 
             for _, v in pairs(coreGui:GetDescendants()) do
-                if v:IsA("TextLabel") then
-                    local txt = v.Text:lower()
+                if v:IsA("TextLabel") or v:IsA("TextButton") then
+                    local txt = (v.Text or ""):lower()
 
                     if txt:find("full") 
                     or txt:find("cheio") 
                     or txt:find("error") 
-                    or txt:find("erro") then
+                    or txt:find("erro") 
+                    or txt:find("failed") 
+                    or txt:find("teleport") then
 
+                        -- tenta esconder
                         v.Visible = false
+
+                        -- tenta destruir depois de 0.1s
+                        task.delay(0.1, function()
+                            pcall(function()
+                                if v and v.Parent then
+                                    v:Destroy()
+                                end
+                            end)
+                        end)
                     end
                 end
             end
         end)
 
-        task.wait(1)
+        task.wait(0.3) -- mais rápido pra sumir quase instantâneo
     end
 end)
 
