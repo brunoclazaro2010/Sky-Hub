@@ -180,15 +180,9 @@ local function doServerHop()
     local success, content = pcall(function() return game:HttpGet(url) end)
     
     if not success or not content or not hopActive then 
-    statusLabel.Text = "Status: Erro (retry...)"
-
-    if autoModeEnabled and hopActive then
-        task.wait(2)
-        doServerHop()
+        statusLabel.Text = "Status: Erro ou Parado"
+        return 
     end
-
-    return 
-end
     
     local decoded = HttpService:JSONDecode(content)
     if decoded and decoded.data then
@@ -208,14 +202,7 @@ end
                 task.wait(2)
             end
         end
-        if hopActive then
-    statusLabel.Text = "Status: Nenhum serv. livre (retry...)"
-
-    if autoModeEnabled then
-        task.wait(2)
-        doServerHop()
-    end
-end
+        if hopActive then statusLabel.Text = "Status: Nenhum serv. livre" end
     else
         statusLabel.Text = "Status: Lista vazia (tentando novamente...)"
 
