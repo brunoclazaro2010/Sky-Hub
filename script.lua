@@ -14,13 +14,12 @@ local speedBoostEnabled = false
 local autoStealEnabled = false
 local antiRagdollEnabled = false
 local serverHopEnabled = false
-local autoHopEnabled = false          -- NOVO: Modo Automático
+local autoHopEnabled = false
 local menuOpen = false
 local isMinimized = false
 local spaceHeld = false
 local isAnimating = false
 local hopActive = false
-local lastNotificationTime = 0        -- NOVO: para detectar notificações recentes
 local boostPower = 28
 local itemSelecionado = nil
 local stealCache = {}
@@ -166,15 +165,15 @@ end
 -- // Lógica de Server Hop
 local function doServerHop()
     if not hopActive then return end
-    statusLabel.Text = "Status: Iniciando busca..."
-    clearStatusAfter(1)  -- limpa após 1s
+    statusLabel.Text = "Iniciando busca..."
+    clearStatusAfter(1)
 
     local placeId = game.PlaceId
     local url = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Asc&limit=100"
     local success, content = pcall(function() return game:HttpGet(url) end)
    
     if not success or not content or not hopActive then
-        statusLabel.Text = "Status: Erro ou Parado"
+        statusLabel.Text = "Erro ou parado"
         clearStatusAfter(1)
         return
     end
@@ -185,18 +184,18 @@ local function doServerHop()
             if not hopActive then break end
             if server.playing < server.maxPlayers and server.id ~= game.JobId and not isBlacklisted(server.id) then
                 addServerToBlacklist(server.id)
-                statusLabel.Text = "Status: Teleportando..."
+                statusLabel.Text = "Teleportando..."
                 clearStatusAfter(1)
                 pcall(function() TeleportService:TeleportToPlaceInstance(placeId, server.id, player) end)
                 task.wait(2)
             end
         end
         if hopActive then 
-            statusLabel.Text = "Status: Nenhum serv. livre"
+            statusLabel.Text = "Nenhum servidor livre"
             clearStatusAfter(1)
         end
     else
-        statusLabel.Text = "Status: Lista vazia"
+        statusLabel.Text = "Lista vazia"
         clearStatusAfter(1)
     end
 end
@@ -293,14 +292,14 @@ end
 -- // Função para limpar status após X segundos
 local function clearStatusAfter(seconds)
     task.delay(seconds, function()
-        if statusLabel.Text:find("Erro") or statusLabel.Text:find("Nenhum") or statusLabel.Text:find("Lista vazia") or statusLabel.Text:find("Parado") or statusLabel.Text:find("Aguardando") then
+        if statusLabel.Text:find("Erro") or statusLabel.Text:find("Nenhum") or statusLabel.Text:find("Lista vazia") or statusLabel.Text:find("Parado") or statusLabel.Text:find("Aguardando") or statusLabel.Text:find("Iniciando") or statusLabel.Text:find("Teleportando") then
             statusLabel.Text = "Status: Aguardando"
             statusLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
         end
     end)
 end
 
--- // Janela Auto Steal Selector
+-- // Janela Auto Steal Selector (mantida igual)
 local selectorFrame = Instance.new("Frame", screenGui)
 selectorFrame.Name = "AutoStealSelector"
 selectorFrame.Size = UDim2.new(0, 180, 0, 220)
@@ -358,14 +357,12 @@ local function atualizarLista()
                     Instance.new("UICorner", b)
                     b.AutoLocalize = false
                     b.ZIndex = 7
-                   
                     local bStroke = Instance.new("UIStroke", b)
                     bStroke.Name = "SelectionBorder"
                     bStroke.Thickness = 2
                     bStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
                     bStroke.Color = Color3.fromRGB(255, 215, 0)
                     bStroke.Enabled = (itemSelecionado == d)
-                   
                     b.MouseButton1Click:Connect(function()
                         if not scriptRunning then return end
                         if itemSelecionado == d then itemSelecionado = nil else itemSelecionado = d end
@@ -385,10 +382,10 @@ local function atualizarLista()
     end
 end
 
--- // Janela Server Hop (aumentado para caber o novo botão)
+-- // Janela Server Hop
 local hopFrame = Instance.new("Frame", screenGui)
 hopFrame.Name = "ServerHopMenu"
-hopFrame.Size = UDim2.new(0, 180, 0, 270)  -- Aumentado
+hopFrame.Size = UDim2.new(0, 180, 0, 270)
 hopFrame.Position = UDim2.new(0.05, 0, 0.5, -400)
 hopFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 hopFrame.Visible = false
@@ -461,18 +458,21 @@ Instance.new("UICorner", stopBtn).CornerRadius = UDim.new(0, 8)
 stopBtn.ZIndex = 11
 applyRotatingLED(Instance.new("UIStroke", stopBtn))
 
--- NOVO BOTÃO MODO AUTOMÁTICO
+-- Botão Modo Automático (estilo igual aos toggles principais)
 local autoBtn = Instance.new("TextButton", hopFrame)
 autoBtn.Size = UDim2.new(0.85, 0, 0, 35)
 autoBtn.Position = UDim2.new(0.075, 0, 0, 200)
 autoBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-autoBtn.Text = "🔄 Modo Automático"
-autoBtn.TextColor3 = Color3.fromRGB(0, 255, 255)
+autoBtn.Text = "Modo Automático"
+autoBtn.TextColor3 = Color3.fromRGB(255, 215, 0)
 autoBtn.Font = Enum.Font.GothamBold
-autoBtn.TextSize = 14
+autoBtn.TextSize = 13
 Instance.new("UICorner", autoBtn).CornerRadius = UDim.new(0, 8)
 autoBtn.ZIndex = 11
-applyRotatingLED(Instance.new("UIStroke", autoBtn))
+local autoStroke = Instance.new("UIStroke", autoBtn)
+autoStroke.Thickness = 2
+autoStroke.Color = Color3.fromRGB(255, 215, 0)
+applyRotatingLED(autoStroke)
 
 -- // Botão Flutuante (Toggle Ball)
 local toggleBall = Instance.new("TextButton", screenGui)
@@ -640,7 +640,12 @@ infBtn.MouseButton1Click:Connect(function() infJumpEnabled = not infJumpEnabled;
 stealBtn.MouseButton1Click:Connect(function() autoStealEnabled = not autoStealEnabled; handleToggle(stealBtn, stealCirc, autoStealEnabled); selectorFrame.Visible = autoStealEnabled; saveSettings() end)
 speedBtn.MouseButton1Click:Connect(function() speedBoostEnabled = not speedBoostEnabled; handleToggle(speedBtn, speedCirc, speedBoostEnabled); saveSettings() end)
 ragBtn.MouseButton1Click:Connect(function() antiRagdollEnabled = not antiRagdollEnabled; handleToggle(ragBtn, ragCirc, antiRagdollEnabled); saveSettings() end)
-hopBtn.MouseButton1Click:Connect(function() serverHopEnabled = not serverHopEnabled; handleToggle(hopBtn, hopCirc, serverHopEnabled); hopFrame.Visible = serverHopEnabled; saveSettings() end)
+hopBtn.MouseButton1Click:Connect(function() 
+    serverHopEnabled = not serverHopEnabled
+    handleToggle(hopBtn, hopCirc, serverHopEnabled)
+    hopFrame.Visible = serverHopEnabled
+    saveSettings()
+end)
 
 hopTextBox:GetPropertyChangedSignal("Text"):Connect(function()
     hopTextBox.Text = hopTextBox.Text:gsub("%D+", "")
@@ -650,8 +655,13 @@ end)
 startBtn.MouseButton1Click:Connect(function()
     hopActive = true
     local target = tonumber(hopTextBox.Text)
-    if not target then statusLabel.Text = "Status: Digite um valor!"; clearStatusAfter(1); return end
-    statusLabel.Text = "Status: Verificando..."; statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    if not target then 
+        statusLabel.Text = "Digite um valor!"
+        clearStatusAfter(1)
+        return 
+    end
+    statusLabel.Text = "Verificando..."
+    statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     clearStatusAfter(1)
     task.wait(1)
     if not hopActive then return end
@@ -659,9 +669,10 @@ startBtn.MouseButton1Click:Connect(function()
     if maxFound >= target then
         statusLabel.Text = "Alvo " .. formatValue(target) .. "+ Detectado!"
         statusLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
-        clearStatusAfter(2)
+        clearStatusAfter(3)
     else
-        statusLabel.Text = "Status: Pulando servidor..."; statusLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+        statusLabel.Text = "Pulando servidor..."
+        statusLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
         clearStatusAfter(1)
         doServerHop()
     end
@@ -669,8 +680,9 @@ end)
 
 stopBtn.MouseButton1Click:Connect(function()
     hopActive = false
-    statusLabel.Text = "Status: Parado Imediatamente"; statusLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
-    clearStatusAfter(1)
+    statusLabel.Text = "Parado imediatamente"
+    statusLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+    clearStatusAfter(2)
 end)
 
 -- Conexão do botão Modo Automático
@@ -678,24 +690,34 @@ autoBtn.MouseButton1Click:Connect(function()
     autoHopEnabled = not autoHopEnabled
     
     if autoHopEnabled then
-        autoBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
-        autoBtn.Text = "🔄 AUTO ATIVADO ✓"
+        -- Ativa o Server Hop automaticamente se não estiver ligado
+        if not serverHopEnabled then
+            serverHopEnabled = true
+            handleToggle(hopBtn, hopCirc, true)
+            hopFrame.Visible = true
+            saveSettings()
+        end
+        
+        autoBtn.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
+        autoBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+        autoBtn.Text = "Modo Automático (ON)"
         hopActive = true
-        statusLabel.Text = "🔄 Modo Automático LIGADO"
-        statusLabel.TextColor3 = Color3.fromRGB(0, 255, 255)
-        clearStatusAfter(1)
+        statusLabel.Text = "Modo Automático ativado"
+        statusLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
+        clearStatusAfter(2)
         task.spawn(autoHopLoop)
     else
         autoBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-        autoBtn.Text = "🔄 Modo Automático"
+        autoBtn.TextColor3 = Color3.fromRGB(255, 215, 0)
+        autoBtn.Text = "Modo Automático"
         hopActive = false
-        statusLabel.Text = "Modo Auto DESLIGADO"
+        statusLabel.Text = "Modo Automático desativado"
         statusLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
-        clearStatusAfter(1)
+        clearStatusAfter(2)
     end
 end)
 
--- ====================== LOOP DO MODO AUTOMÁTICO ======================
+-- Loop do Modo Automático
 local function autoHopLoop()
     while autoHopEnabled and scriptRunning do
         local best = getBestBrainrot()
@@ -703,30 +725,34 @@ local function autoHopLoop()
             autoHopEnabled = false
             hopActive = false
             autoBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-            autoBtn.Text = "🔄 Modo Automático"
-            statusLabel.Text = "🛑 Brainrot detectado! Auto DESLIGADO"
-            statusLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
-            clearStatusAfter(2)
+            autoBtn.TextColor3 = Color3.fromRGB(255, 215, 0)
+            autoBtn.Text = "Modo Automático"
+            statusLabel.Text = "Brainrot alto detectado – auto pausado"
+            statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+            clearStatusAfter(3)
             break
         end
 
-        statusLabel.Text = "🔄 Buscando servidor novo..."
-        statusLabel.TextColor3 = Color3.fromRGB(0, 255, 255)
+        statusLabel.Text = "Buscando servidor melhor..."
+        statusLabel.TextColor3 = Color3.fromRGB(200, 255, 200)
         clearStatusAfter(1)
+        
         doServerHop()
 
-        for i = 5, 1, -1 do
-            if not autoHopEnabled then break end
-            statusLabel.Text = "⏳ Aguardando " .. i .. "s para próximo hop..."
+        local waited = 0
+        while waited < 5 and autoHopEnabled do
+            statusLabel.Text = "Aguardando " .. (5 - waited) .. "s..."
             task.wait(1)
+            waited = waited + 1
         end
 
-        if autoHopEnabled then
-            statusLabel.Text = "🔄 Iniciando próximo hop automático..."
-            clearStatusAfter(1)
-        else
-            break
-        end
+        if not autoHopEnabled then break end
+    end
+    
+    if not autoHopEnabled then
+        autoBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+        autoBtn.TextColor3 = Color3.fromRGB(255, 215, 0)
+        autoBtn.Text = "Modo Automático"
     end
 end
 
@@ -804,15 +830,15 @@ task.spawn(function()
                 notifyLabel.Text = "💰 " .. best.name .. " | " .. best.income
                 notifySound:Play()
                 notifyLabel:TweenPosition(UDim2.new(0, 0, 0, 10), "Out", "Back", 0.5, true)
-                -- DESLIGA MODO AUTO SE DETECTAR BRAINROT ALTO
                 if autoHopEnabled then
                     autoHopEnabled = false
                     hopActive = false
                     autoBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-                    autoBtn.Text = "🔄 Modo Automático"
-                    statusLabel.Text = "🛑 Brainrot detectado! Auto DESLIGADO"
+                    autoBtn.TextColor3 = Color3.fromRGB(255, 215, 0)
+                    autoBtn.Text = "Modo Automático"
+                    statusLabel.Text = "Brainrot detectado! Auto DESLIGADO"
                     statusLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
-                    clearStatusAfter(2)
+                    clearStatusAfter(3)
                 end
                 task.delay(5, function()
                     notifyLabel:TweenPosition(UDim2.new(0, 0, 0, -40), "In", "Quad", 0.5, true)
