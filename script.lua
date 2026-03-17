@@ -5,7 +5,7 @@ local RunService = game:GetService("RunService")
 local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
 
--- // Variáveis de Estado
+
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local scriptRunning = true
@@ -19,7 +19,7 @@ local isMinimized = false
 local spaceHeld = false
 local isAnimating = false
 local hopActive = false
-local autoModeEnabled = false -- [MODIFICAÇÃO 1: VARIÁVEL NOVA]
+local autoModeEnabled = false 
 local boostPower = 28
 local itemSelecionado = nil
 local stealCache = {}
@@ -28,7 +28,7 @@ local rotatingGradients = {}
 local targetRotation = 0
 local espGui
 
--- // Sistema de Arquivos e Configurações
+
 local folderName = "SkyHub"
 local fileName = folderName .. "/Config.json"
 if makefolder and not isfolder(folderName) then makefolder(folderName) end
@@ -46,7 +46,7 @@ local function saveSettings()
     writefile(fileName, HttpService:JSONEncode(config))
 end
 
--- // Sistema de Blacklist de Servidores
+
 local blacklistFile = folderName .. "/ServerBlacklist.json"
 local serverBlacklist = {}
 
@@ -75,7 +75,7 @@ local function isBlacklisted(id)
     return false
 end
 
--- // Interface Base (UI)
+
 local oldGui = playerGui:FindFirstChild("DarkGeminiMenu")
 if oldGui then oldGui:Destroy() end
 
@@ -99,7 +99,7 @@ notifyLabel.TextSize = 16
 notifyLabel.Text = ""
 Instance.new("UIStroke", notifyLabel).Color = Color3.fromRGB(255, 215, 0)
 
--- // Funções Utilitárias de Cálculo
+
 local function parseValue(text)
     text = text:lower()
     local num = tonumber(text:match("[%d%.]+"))
@@ -126,7 +126,7 @@ local function formatValue(n)
     end
 end
 
--- // Lógica de Detecção de "Brainrot"
+
 local function getBestBrainrot()
     local highest = 0
     local bestData = nil
@@ -171,7 +171,7 @@ local function getHighestValue()
     return highest
 end
 
--- // Lógica de Server Hop
+
 local function doServerHop()
     if not hopActive then return end
     statusLabel.Text = "Status: Iniciando busca..."
@@ -201,7 +201,7 @@ local function doServerHop()
     end
 end
 
--- // Efeitos Visuais
+
 local function applyShine(target)
     local grad = Instance.new("UIGradient", target)
     grad.Color = ColorSequence.new({
@@ -264,7 +264,7 @@ local function createBrainrotESP(data)
     return billboard
 end
 
--- // Helpers da Interface
+
 local function handleToggle(btn, circle, state)
     TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = state and Color3.fromRGB(255, 215, 0) or Color3.fromRGB(50, 50, 50)}):Play()
     TweenService:Create(circle, TweenInfo.new(0.2), {Position = state and UDim2.new(1, -23, 0.5, -10) or UDim2.new(0, 3, 0.5, -10)}):Play()
@@ -295,12 +295,12 @@ local function drag(o)
     end)
 end
 
--- [MODIFICAÇÃO 3: DETECÇÃO DE NOTIFICAÇÃO]
+
 local function isBrainrotNotifying()
     return notifyLabel.Text ~= ""
 end
 
--- // Janela Auto Steal Selector
+
 local selectorFrame = Instance.new("Frame", screenGui)
 selectorFrame.Name = "AutoStealSelector"
 selectorFrame.Size = UDim2.new(0, 180, 0, 220)
@@ -389,10 +389,10 @@ local function atualizarLista()
     end
 end
 
--- // Janela Server Hop
+
 local hopFrame = Instance.new("Frame", screenGui)
 hopFrame.Name = "ServerHopMenu"
-hopFrame.Size = UDim2.new(0, 180, 0, 260) -- [Aumentado para caber o novo botão]
+hopFrame.Size = UDim2.new(0, 180, 0, 260) 
 hopFrame.Position = UDim2.new(0.05, 0, 0.5, -400)
 hopFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 hopFrame.Visible = false
@@ -471,7 +471,7 @@ Instance.new("UICorner", stopBtn).CornerRadius = UDim.new(0, 8)
 stopBtn.ZIndex = 11
 applyRotatingLED(Instance.new("UIStroke", stopBtn))
 
--- [MODIFICAÇÃO 2: BOTÃO MODO AUTOMATICO]
+
 local autoBtn = Instance.new("TextButton", hopFrame)
 autoBtn.Size = UDim2.new(0.85, 0, 0, 35)
 autoBtn.Position = UDim2.new(0.075, 0, 0, 205)
@@ -483,7 +483,7 @@ Instance.new("UICorner", autoBtn).CornerRadius = UDim.new(0, 8)
 autoBtn.ZIndex = 11
 applyRotatingLED(Instance.new("UIStroke", autoBtn))
 
--- // Botão Flutuante (Toggle Ball)
+
 local toggleBall = Instance.new("TextButton", screenGui)
 toggleBall.Size = UDim2.new(0, 45, 0, 45)
 toggleBall.Position = UDim2.new(0.8, 70, 0.5, -190)
@@ -507,7 +507,7 @@ cloudIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 cloudIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
 cloudIcon.ZIndex = 21
 
--- // Janela Principal
+
 local mainFrame = Instance.new("Frame", screenGui)
 mainFrame.Size = UDim2.new(0, 400, 0, 350)
 mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -588,7 +588,7 @@ local speedBtn, speedCirc = createOption("Speed Boost", 180)
 local ragBtn, ragCirc = createOption("Anti Ragdoll", 220)
 local hopBtn, hopCirc = createOption("Server Hop", 260)
 
--- // Funções de Controle de Janela
+
 local function toggleMenu()
     if not scriptRunning or isAnimating then return end
     isAnimating = true
@@ -639,7 +639,7 @@ end)
 
 toggleBall.MouseButton1Click:Connect(toggleMenu)
 
--- // Carregamento e Conexões de Botões
+
 local function loadSettings()
     if isfile and isfile(fileName) then
         local success, data = pcall(function() return HttpService:JSONDecode(readfile(fileName)) end)
@@ -687,7 +687,7 @@ stopBtn.MouseButton1Click:Connect(function()
     statusLabel.Text = "Status: Parado Imediatamente"; statusLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
 end)
 
--- [MODIFICAÇÃO 6: BOTÃO ATIVAR / DESATIVAR AUTO MODE]
+
 autoBtn.MouseButton1Click:Connect(function()
     autoModeEnabled = not autoModeEnabled
 
@@ -699,7 +699,7 @@ autoBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- // Loop Principal (Heartbeat)
+
 RunService.Heartbeat:Connect(function()
     if not scriptRunning then return end
     local t = os.clock()
@@ -713,7 +713,7 @@ RunService.Heartbeat:Connect(function()
     local hum = char and char:FindFirstChildOfClass("Humanoid")
 
     if root and hum then
-        -- Anti Ragdoll
+        
         if antiRagdollEnabled then
             hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
             hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
@@ -729,7 +729,7 @@ RunService.Heartbeat:Connect(function()
 
         speedDisplay.Text = "Speed: " .. math.floor(root.AssemblyLinearVelocity.Magnitude) .. " SPS"
 
-        -- Speed Boost
+        
         if speedBoostEnabled and hum.MoveDirection.Magnitude > 0 then
             local rayParam = RaycastParams.new()
             rayParam.FilterDescendantsInstances = {char}
@@ -740,12 +740,12 @@ RunService.Heartbeat:Connect(function()
             end
         end
 
-        -- Infinity Jump
+        
         if infJumpEnabled and spaceHeld then
             root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, 48, root.AssemblyLinearVelocity.Z)
         end
 
-        -- Auto Steal
+        
         if autoStealEnabled then
             if itemSelecionado and itemSelecionado.Parent then
                 itemSelecionado.HoldDuration = 0
@@ -762,7 +762,7 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- // Loop de Detecção de Brainrot e Notificações
+
 local currentBrainrotValue = 0
 local lastNotify = 0
 task.spawn(function()
@@ -782,7 +782,7 @@ task.spawn(function()
             if value >= 10000000 and (os.clock() - lastNotify > 10) then
                 notifyLabel.Text = "💰 " .. best.name .. " | " .. best.income
                 
-                -- [MODIFICAÇÃO 4: MODIFICAR NOTIFICAÇÃO]
+                
                 if autoModeEnabled then
                     autoModeEnabled = false
                     hopActive = false
@@ -805,7 +805,7 @@ task.spawn(function()
     end
 end)
 
--- // Input Events
+
 UserInputService.JumpRequest:Connect(function()
     if scriptRunning and infJumpEnabled then
         spaceHeld = true
@@ -822,7 +822,7 @@ UserInputService.InputBegan:Connect(function(i, g)
     end
 end)
 
--- // Loop de Atualização da Lista de Itens
+
 task.spawn(function()
     while scriptRunning do
         atualizarLista()
@@ -830,7 +830,7 @@ task.spawn(function()
     end
 end)
 
--- [MODIFICAÇÃO 5: LOOP DO MODO AUTOMÁTICO]
+
 task.spawn(function()
     while scriptRunning do
         if autoModeEnabled then
@@ -849,7 +849,7 @@ task.spawn(function()
     end
 end)
 
--- // Inicialização Final
+
 drag(mainFrame)
 drag(toggleBall)
 drag(selectorFrame)
@@ -858,7 +858,7 @@ drag(hopFrame)
 loadSettings()
 loadBlacklist()
 
--- [MODIFICAÇÃO 7: ESCONDER ERROS DE TELEPORTE]
+
 game:GetService("TeleportService").TeleportInitFailed:Connect(function()
     task.spawn(function()
         for _, gui in pairs(playerGui:GetDescendants()) do
