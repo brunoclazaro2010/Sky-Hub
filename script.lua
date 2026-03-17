@@ -204,7 +204,12 @@ local function doServerHop()
         end
         if hopActive then statusLabel.Text = "Status: Nenhum serv. livre" end
     else
-        statusLabel.Text = "Status: Lista vazia"
+        statusLabel.Text = "Status: Lista vazia (tentando novamente...)"
+
+        if autoModeEnabled and hopActive then
+            task.wait(2)
+            doServerHop()
+        end
     end
 end
 
@@ -394,7 +399,7 @@ end
 -- // Janela Server Hop
 local hopFrame = Instance.new("Frame", screenGui)
 hopFrame.Name = "ServerHopMenu"
-hopFrame.Size = UDim2.new(0, 180, 0, 260) -- Aumentado para caber o novo botão
+hopFrame.Size = UDim2.new(0, 180, 0, 260)
 hopFrame.Position = UDim2.new(0.05, 0, 0.5, -400)
 hopFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 hopFrame.Visible = false
@@ -856,7 +861,7 @@ task.spawn(function()
             -- espera 5 segundos
             task.wait(5)
 
-            -- verifica brainrot (se a label de notificação está visível/ativa)
+            -- verifica brainrot
             if notifyLabel.Text ~= "" then
                 autoModeEnabled = false
                 hopActive = false
@@ -867,6 +872,30 @@ task.spawn(function()
                 doServerHop()
             end
         end
+    end
+end)
+
+task.spawn(function()
+    while scriptRunning do
+        pcall(function()
+            local coreGui = game:GetService("CoreGui")
+
+            for _, v in pairs(coreGui:GetDescendants()) do
+                if v:IsA("TextLabel") then
+                    local txt = v.Text:lower()
+
+                    if txt:find("full") 
+                    or txt:find("cheio") 
+                    or txt:find("error") 
+                    or txt:find("erro") then
+
+                        v.Visible = false
+                    end
+                end
+            end
+        end)
+
+        task.wait(1)
     end
 end)
 
