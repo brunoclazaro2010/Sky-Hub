@@ -19,7 +19,6 @@ local isMinimized = false
 local spaceHeld = false
 local isAnimating = false
 local hopActive = false
-local autoModeEnabled = false
 local boostPower = 28
 local itemSelecionado = nil
 local stealCache = {}
@@ -191,25 +190,13 @@ local function doServerHop()
             if server.playing < server.maxPlayers and server.id ~= game.JobId and not isBlacklisted(server.id) then
                 addServerToBlacklist(server.id)
                 statusLabel.Text = "Status: Teleportando..."
-                
-                pcall(function()
-                    if autoModeEnabled then
-                        writefile(folderName .. "/AutoMode.txt", "true")
-                    end
-                    TeleportService:TeleportToPlaceInstance(placeId, server.id, player)
-                end)
-                
+                pcall(function() TeleportService:TeleportToPlaceInstance(placeId, server.id, player) end)
                 task.wait(2)
             end
         end
         if hopActive then statusLabel.Text = "Status: Nenhum serv. livre" end
     else
-        statusLabel.Text = "Status: Lista vazia (tentando novamente...)"
-
-        if autoModeEnabled and hopActive then
-            task.wait(2)
-            doServerHop()
-        end
+        statusLabel.Text = "Status: Lista vazia"
     end
 end
 
@@ -399,7 +386,7 @@ end
 -- // Janela Server Hop
 local hopFrame = Instance.new("Frame", screenGui)
 hopFrame.Name = "ServerHopMenu"
-hopFrame.Size = UDim2.new(0, 180, 0, 260)
+hopFrame.Size = UDim2.new(0, 180, 0, 220)
 hopFrame.Position = UDim2.new(0.05, 0, 0.5, -400)
 hopFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 hopFrame.Visible = false
@@ -477,17 +464,6 @@ stopBtn.Font = Enum.Font.GothamBold
 Instance.new("UICorner", stopBtn).CornerRadius = UDim.new(0, 8)
 stopBtn.ZIndex = 11
 applyRotatingLED(Instance.new("UIStroke", stopBtn))
-
-local autoBtn = Instance.new("TextButton", hopFrame)
-autoBtn.Size = UDim2.new(0.85, 0, 0, 35)
-autoBtn.Position = UDim2.new(0.075, 0, 0, 205)
-autoBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-autoBtn.Text = "Modo Automático"
-autoBtn.TextColor3 = Color3.fromRGB(0, 255, 0)
-autoBtn.Font = Enum.Font.GothamBold
-Instance.new("UICorner", autoBtn).CornerRadius = UDim.new(0, 8)
-autoBtn.ZIndex = 11
-applyRotatingLED(Instance.new("UIStroke", autoBtn))
 
 -- // Botão Flutuante (Toggle Ball)
 local toggleBall = Instance.new("TextButton", screenGui)
@@ -693,19 +669,6 @@ stopBtn.MouseButton1Click:Connect(function()
     statusLabel.Text = "Status: Parado Imediatamente"; statusLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
 end)
 
-autoBtn.MouseButton1Click:Connect(function()
-    autoModeEnabled = not autoModeEnabled
-
-    if autoModeEnabled then
-        statusLabel.Text = "Auto: Ligado"
-        hopActive = true
-        doServerHop()
-    else
-        hopActive = false
-        statusLabel.Text = "Auto: Desligado"
-    end
-end)
-
 -- // Loop Principal (Heartbeat)
 RunService.Heartbeat:Connect(function()
     if not scriptRunning then return end
@@ -788,13 +751,6 @@ task.spawn(function()
             end
             if value >= 10000000 and (os.clock() - lastNotify > 10) then
                 notifyLabel.Text = "💰 " .. best.name .. " | " .. best.income
-                
-                if autoModeEnabled then
-                    autoModeEnabled = false
-                    hopActive = false
-                    statusLabel.Text = "Auto: Brainrot detectado!"
-                end
-                
                 notifySound:Play()
                 notifyLabel:TweenPosition(UDim2.new(0, 0, 0, 10), "Out", "Back", 0.5, true)
                 task.delay(5, function()
@@ -844,60 +800,6 @@ drag(hopFrame)
 
 loadSettings()
 loadBlacklist()
-
-task.spawn(function()
-    if isfile and isfile(folderName .. "/AutoMode.txt") then
-        local data = readfile(folderName .. "/AutoMode.txt")
-
-        if data == "true" then
-            autoModeEnabled = true
-            statusLabel.Text = "Auto: Retomado"
-
-            delfile(folderName .. "/AutoMode.txt")
-
-            -- espera o player spawnar
-            repeat task.wait() until player.Character
-
-            -- espera 5 segundos
-            task.wait(5)
-
-            -- verifica brainrot
-            if notifyLabel.Text ~= "" then
-                autoModeEnabled = false
-                hopActive = false
-                statusLabel.Text = "Auto: Encontrado!"
-            else
-                statusLabel.Text = "Auto: Continuando..."
-                hopActive = true
-                doServerHop()
-            end
-        end
-    end
-end)
-
-task.spawn(function()
-    while scriptRunning do
-        pcall(function()
-            local coreGui = game:GetService("CoreGui")
-
-            for _, v in pairs(coreGui:GetDescendants()) do
-                if v:IsA("TextLabel") then
-                    local txt = v.Text:lower()
-
-                    if txt:find("full") 
-                    or txt:find("cheio") 
-                    or txt:find("error") 
-                    or txt:find("erro") then
-
-                        v.Visible = false
-                    end
-                end
-            end
-        end)
-
-        task.wait(1)
-    end
-end)
 
 task.wait(1)
 toggleMenu()
