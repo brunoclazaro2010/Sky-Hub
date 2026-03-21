@@ -28,6 +28,9 @@ local shineGradients = {}
 local rotatingGradients = {}
 local targetRotation = 0
 local espGui
+local desyncPosition = nil
+local desyncESP = nil
+local lastDesyncUpdate = 0
 
 -- // Sistema de Arquivos e Configurações
 local folderName = "SkyHub"
@@ -261,6 +264,24 @@ local function createBrainrotESP(data)
     text.TextWrapped = true
     text.Text = (data.name or "Item") .. "\n" .. (data.income or "$0/s")
     return billboard
+end
+
+local function createDesyncESP(pos)
+    if desyncESP then
+        desyncESP:Destroy()
+        desyncESP = nil
+    end
+
+    local part = Instance.new("Part")
+    part.Size = Vector3.new(2,2,2)
+    part.Anchored = true
+    part.CanCollide = false
+    part.Color = Color3.fromRGB(255, 0, 0)
+    part.Material = Enum.Material.Neon
+    part.Position = pos
+    part.Parent = workspace
+
+    desyncESP = part
 end
 
 -- // Helpers da Interface
@@ -805,6 +826,31 @@ RunService.Heartbeat:Connect(function()
                         fireproximityprompt(d)
                     end
                 end
+            end
+        end
+
+        -- DESYNC
+        if desyncEnabled then
+            if os.clock() - lastDesyncUpdate > 0.3 then
+                desyncPosition = root.Position
+                lastDesyncUpdate = os.clock()
+
+                createDesyncESP(desyncPosition)
+            end
+
+            -- efeito de "lag"
+            root.AssemblyLinearVelocity = root.AssemblyLinearVelocity * 0.3
+
+            -- pequeno teleporte aleatório
+            root.CFrame = root.CFrame * CFrame.new(
+                math.random(-2,2),
+                0,
+                math.random(-2,2)
+            )
+        else
+            if desyncESP then
+                desyncESP:Destroy()
+                desyncESP = nil
             end
         end
     end
