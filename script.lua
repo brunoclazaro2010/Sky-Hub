@@ -267,11 +267,11 @@ local function getHighestValue()
     return highest
 end
 
--- // Lógica de Server Hop (modificada para salvar o JobId)
+-- // Lógica de Server Hop MODIFICADA (servidor aleatório + tenta outro se cheio)
 local function doServerHop()
     if not hopActive then return end
     
-    statusLabel.Text = "Status: Iniciando busca..."
+    statusLabel.Text = "Status: Buscando servidor aleatório..."
     
     local placeId = game.PlaceId
     local url = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Asc&limit=100"
@@ -287,35 +287,64 @@ local function doServerHop()
     
     local decoded = HttpService:JSONDecode(content)
     
-    if decoded and decoded.data then
+    if decoded and decoded.data and #decoded.data > 0 then
+        -- Coleta TODOS os servidores disponíveis
+        local availableServers = {}
         for _, server in ipairs(decoded.data) do
-            if not hopActive then break end
-            
             if server.playing < server.maxPlayers 
             and server.id ~= game.JobId 
             and not isBlacklisted(server.id) then
-                
-                addServerToBlacklist(server.id)
-                statusLabel.Text = "Status: Teleportando..."
+                table.insert(availableServers, server)
+            end
+        end
+        
+        if #availableServers > 0 then
+            -- Embaralha a lista para ficar aleatório
+            for i = #availableServers, 2, -1 do
+                local j = math.random(i)
+                availableServers[i], availableServers[j] = availableServers[j], availableServers[i]
+            end
+            
+            -- Tenta encontrar um servidor com vaga (já estão todos com vaga, mas vamos tentar até achar)
+            local selectedServer = nil
+            for _, server in ipairs(availableServers) do
+                if server.playing < server.maxPlayers and not isBlacklisted(server.id) then
+                    selectedServer = server
+                    break
+                end
+            end
+            
+            if selectedServer then
+                addServerToBlacklist(selectedServer.id)
+                statusLabel.Text = "Status: Teleportando para servidor aleatório com " .. selectedServer.playing .. "/" .. selectedServer.maxPlayers .. " jogadores..."
                 
                 -- SALVA O JOBID DO SERVIDOR QUE VAMOS ENTRAR
-                currentServerJobId = server.id
+                currentServerJobId = selectedServer.id
                 saveJobIdToFile(currentServerJobId)
+                print("[SkyHub] 🎲 Servidor aleatório escolhido: " .. selectedServer.playing .. "/" .. selectedServer.maxPlayers .. " jogadores")
                 print("[SkyHub] 📌 JobId salvo para este servidor: " .. currentServerJobId)
                 
                 pcall(function()
                     if autoModeEnabled then
                         writefile(folderName .. "/AutoMode.txt", "true")
                     end
-                    TeleportService:TeleportToPlaceInstance(placeId, server.id, player)
+                    TeleportService:TeleportToPlaceInstance(placeId, selectedServer.id, player)
                 end)
                 
                 task.wait(2)
+            else
+                statusLabel.Text = "Status: Nenhum servidor livre encontrado"
+                if autoModeEnabled and hopActive then
+                    task.wait(2)
+                    doServerHop()
+                end
             end
-        end
-        
-        if hopActive then
-            statusLabel.Text = "Status: Nenhum serv. livre"
+        else
+            statusLabel.Text = "Status: Nenhum servidor disponível"
+            if autoModeEnabled and hopActive then
+                task.wait(2)
+                doServerHop()
+            end
         end
     else
         statusLabel.Text = "Status: Lista vazia (tentando novamente...)"
