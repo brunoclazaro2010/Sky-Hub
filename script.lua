@@ -915,6 +915,7 @@ end)
 -- // Loop de Detecção de Brainrot e Notificações
 local currentBrainrotValue = 0
 local lastNotify = 0
+local lastBrainrotName = ""  -- NOVA VARIÁVEL: guarda o nome do último brainrot que tocou o som
 
 task.spawn(function()
     while scriptRunning do
@@ -937,25 +938,32 @@ task.spawn(function()
                 currentBrainrotValue = value
             end
             
+            -- MODIFICAÇÃO AQUI: só toca o som se o nome do brainrot for diferente do último que tocou
             if value >= 10000000 and (os.clock() - lastNotify > 10) then
-                notifyLabel.Text = "💰 " .. best.name .. " | " .. best.income
+                -- Verifica se é um brainrot diferente do último que tocou
+                local currentBrainrotName = best.name or ""
                 
-                if autoModeEnabled then
-                    autoModeEnabled = false
-                    hopActive = false
-                    statusLabel.Text = "Auto: Brainrot detectado!"
+                if currentBrainrotName ~= lastBrainrotName then
+                    notifyLabel.Text = "💰 " .. best.name .. " | " .. best.income
+                    
+                    if autoModeEnabled then
+                        autoModeEnabled = false
+                        hopActive = false
+                        statusLabel.Text = "Auto: Brainrot detectado!"
+                    end
+                    
+                    notifySound:Play()
+                    
+                    notifyLabel:TweenPosition(UDim2.new(0, 0, 0, 10), "Out", "Back", 0.5, true)
+                    
+                    task.delay(5, function()
+                        notifyLabel:TweenPosition(UDim2.new(0, 0, 0, -40), "In", "Quad", 0.5, true)
+                        notifyLabel.Text = ""
+                    end)
+                    
+                    lastNotify = os.clock()
+                    lastBrainrotName = currentBrainrotName  -- Atualiza o último nome que tocou
                 end
-                
-                notifySound:Play()
-                
-                notifyLabel:TweenPosition(UDim2.new(0, 0, 0, 10), "Out", "Back", 0.5, true)
-                
-                task.delay(5, function()
-                    notifyLabel:TweenPosition(UDim2.new(0, 0, 0, -40), "In", "Quad", 0.5, true)
-                    notifyLabel.Text = ""
-                end)
-                
-                lastNotify = os.clock()
             end
         else
             currentBrainrotValue = 0
