@@ -28,13 +28,93 @@ local rotatingGradients = {}
 local targetRotation = 0
 local espGui
 
+-- Variável para armazenar o JobId atual (salvo quando teleporta)
+local currentServerJobId = nil
+
 -- // Sistema de Arquivos e Configurações
 local folderName = "SkyHub"
 local fileName = folderName .. "/Config.json"
+local jobIdFile = folderName .. "/CurrentJobId.txt"
 
 if makefolder and not isfolder(folderName) then
     makefolder(folderName)
 end
+
+-- Função para salvar JobId em arquivo
+local function saveJobIdToFile(jobId)
+    if writefile then
+        writefile(jobIdFile, jobId or "")
+        print("[SkyHub] 💾 JobId salvo no arquivo: " .. (jobId or "vazio"))
+    end
+end
+
+-- Função para carregar JobId do arquivo
+local function loadJobIdFromFile()
+    if isfile and isfile(jobIdFile) then
+        local data = readfile(jobIdFile)
+        if data and data ~= "" then
+            currentServerJobId = data
+            print("[SkyHub] 📂 JobId carregado do arquivo: " .. currentServerJobId)
+            return currentServerJobId
+        end
+    end
+    return nil
+end
+
+-- ==================== DISCORD WEBHOOK ====================
+local discordWebhookEnabled = true
+local webhookUrl = "https://discord.com/api/webhooks/1492197458950754527/JXmigrKS6vN7BYD-72Hb6ZlT6DBa8q5vLgBy4u0qMMCEdPUFpbn1CSh0meDEFYdeiuXb"
+
+local function sendBrainrotToDiscord(bestData)
+    if not discordWebhookEnabled or not bestData then return end
+    
+    -- Pega o JobId salvo (da memória ou do arquivo)
+    local jobIdToSend = currentServerJobId or loadJobIdFromFile()
+    
+    if not jobIdToSend or jobIdToSend == "" then
+        print("[SkyHub] ⚠️ Nenhum JobId salvo para este servidor! Não vai enviar.")
+        return
+    end
+    
+    print("[SkyHub] 💰 Brainrot detectado! Enviando para o Discord com JobId: " .. jobIdToSend)
+
+    local message = "💰 **Brainrot Detectado!**\n" ..
+                    "**Nome:** " .. (bestData.name or "Brainrot") .. "\n" ..
+                    "**Valor:** " .. (bestData.income or "$0/s") .. "\n\n" ..
+                    "**ID do Servidor**\n```\n" .. jobIdToSend .. "\n```\n\n" ..
+                    "**Comando para Rejoin (PC/Mobile)**\n```lua\ngame:GetService(\"TeleportService\"):TeleportToPlaceInstance(" .. game.PlaceId .. ", \"" .. jobIdToSend .. "\", game.Players.LocalPlayer)\n```\n\n" ..
+                    "**📱 ID do Servidor (Mobile)**\n`" .. jobIdToSend .. "`"
+
+    local data = {
+        ["content"] = message
+    }
+
+    local jsonData = HttpService:JSONEncode(data)
+    local req = syn and syn.request or http_request or request
+
+    if not req then
+        warn("[SkyHub] ❌ Seu executor não suporta HTTP Requests")
+        return
+    end
+
+    local success, err = pcall(function()
+        req({
+            Url = webhookUrl,
+            Method = "POST",
+            Headers = {
+                ["Content-Type"] = "application/json"
+            },
+            Body = jsonData
+        })
+    end)
+
+    if success then
+        print("[SkyHub] ✅ Webhook enviado com sucesso! ID: " .. jobIdToSend)
+    else
+        warn("[SkyHub] ❌ Erro ao enviar: " .. tostring(err))
+    end
+end
+-- =====================================================================
 
 local function saveSettings()
     if not writefile then return end
@@ -187,7 +267,7 @@ local function getHighestValue()
     return highest
 end
 
--- // Lógica de Server Hop
+-- // Lógica de Server Hop (modificada para salvar o JobId)
 local function doServerHop()
     if not hopActive then return end
     
@@ -217,6 +297,11 @@ local function doServerHop()
                 
                 addServerToBlacklist(server.id)
                 statusLabel.Text = "Status: Teleportando..."
+                
+                -- SALVA O JOBID DO SERVIDOR QUE VAMOS ENTRAR
+                currentServerJobId = server.id
+                saveJobIdToFile(currentServerJobId)
+                print("[SkyHub] 📌 JobId salvo para este servidor: " .. currentServerJobId)
                 
                 pcall(function()
                     if autoModeEnabled then
@@ -912,10 +997,13 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- // Loop de Detecção de Brainrot e Notificações
+-- // Loop de Detecção de Brainrot e Notificações (com envio para o Discord)
 local currentBrainrotValue = 0
 local lastNotify = 0
-local lastBrainrotName = ""  -- NOVA VARIÁVEL: guarda o nome do último brainrot que tocou o som
+local lastNotifiedBrainrot = nil
+
+-- Tenta carregar JobId salvo anteriormente ao iniciar
+loadJobIdFromFile()
 
 task.spawn(function()
     while scriptRunning do
@@ -938,12 +1026,12 @@ task.spawn(function()
                 currentBrainrotValue = value
             end
             
-            -- MODIFICAÇÃO AQUI: só toca o som se o nome do brainrot for diferente do último que tocou
+            -- CRIA UM ID ÚNICO PARA O BRAINROT (nome + valor)
+            local brainrotId = (best.name or "") .. "|" .. (best.income or "")
+            
             if value >= 10000000 and (os.clock() - lastNotify > 10) then
-                -- Verifica se é um brainrot diferente do último que tocou
-                local currentBrainrotName = best.name or ""
-                
-                if currentBrainrotName ~= lastBrainrotName then
+                -- Verifica se é um brainrot diferente do último que notificou
+                if brainrotId ~= lastNotifiedBrainrot then
                     notifyLabel.Text = "💰 " .. best.name .. " | " .. best.income
                     
                     if autoModeEnabled then
@@ -956,13 +1044,18 @@ task.spawn(function()
                     
                     notifyLabel:TweenPosition(UDim2.new(0, 0, 0, 10), "Out", "Back", 0.5, true)
                     
+                    -- ENVIA PARA O DISCORD
+                    sendBrainrotToDiscord(best)
+                    
+                    -- Marca este brainrot como já notificado
+                    lastNotifiedBrainrot = brainrotId
+                    
                     task.delay(5, function()
                         notifyLabel:TweenPosition(UDim2.new(0, 0, 0, -40), "In", "Quad", 0.5, true)
                         notifyLabel.Text = ""
                     end)
                     
                     lastNotify = os.clock()
-                    lastBrainrotName = currentBrainrotName  -- Atualiza o último nome que tocou
                 end
             end
         else
