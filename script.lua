@@ -31,9 +31,6 @@ local espGui
 -- Variável para armazenar o JobId atual (salvo quando teleporta)
 local currentServerJobId = nil
 
--- Variável para controlar tentativa de teleporte
-local isTeleporting = false
-
 -- // Sistema de Arquivos e Configurações
 local folderName = "SkyHub"
 local fileName = folderName .. "/Config.json"
@@ -62,53 +59,6 @@ local function loadJobIdFromFile()
         end
     end
     return nil
-end
-
--- ==================== FUNÇÃO PARA FECHAR POPUP DE ERRO ====================
-local function closeErrorPopup()
-    pcall(function()
-        local coreGui = game:GetService("CoreGui")
-        for _, v in pairs(coreGui:GetDescendants()) do
-            if v:IsA("TextButton") and v.Visible and v.AbsoluteSize.X > 100 then
-                local text = v.Text:lower()
-                if text:find("ok") or text:find("confirm") or text:find("fechar") or text:find("close") then
-                    v:Click()
-                    task.wait(0.5)
-                end
-            end
-        end
-        for _, v in pairs(game:GetService("Players").LocalPlayer.PlayerGui:GetDescendants()) do
-            if v:IsA("TextButton") and v.Visible then
-                local text = v.Text:lower()
-                if text:find("ok") or text:find("confirm") or text:find("fechar") or text:find("close") then
-                    v:Click()
-                    task.wait(0.5)
-                end
-            end
-        end
-    end)
-end
-
--- ==================== FUNÇÃO DE TELEPORTE COM VERIFICAÇÃO ====================
-local function safeTeleport(placeId, jobId)
-    if isTeleporting then return false end
-    isTeleporting = true
-    
-    local success = pcall(function()
-        TeleportService:TeleportToPlaceInstance(placeId, jobId, player)
-    end)
-    
-    if not success then
-        print("[SkyHub] ❌ Erro ao teleportar para: " .. jobId)
-        closeErrorPopup()
-        isTeleporting = false
-        return false
-    end
-    
-    -- Se o teleporte foi iniciado com sucesso, aguarda
-    task.wait(2)
-    isTeleporting = false
-    return true
 end
 
 -- ==================== DISCORD WEBHOOK ====================
@@ -317,7 +267,7 @@ local function getHighestValue()
     return highest
 end
 
--- // Lógica de Server Hop MODIFICADA (servidor aleatório + tenta outro se erro)
+-- // Lógica de Server Hop MODIFICADA (servidor aleatório + tenta outro se cheio)
 local function doServerHop()
     if not hopActive then return end
     
@@ -355,45 +305,39 @@ local function doServerHop()
                 availableServers[i], availableServers[j] = availableServers[j], availableServers[i]
             end
             
-            -- Tenta encontrar um servidor e teleportar
-            local teleportSuccess = false
-            local attempts = 0
-            local maxAttempts = #availableServers
-            
+            -- Tenta encontrar um servidor com vaga (já estão todos com vaga, mas vamos tentar até achar)
+            local selectedServer = nil
             for _, server in ipairs(availableServers) do
-                if not hopActive then break end
-                attempts = attempts + 1
-                
                 if server.playing < server.maxPlayers and not isBlacklisted(server.id) then
-                    statusLabel.Text = "Status: Tentando servidor " .. attempts .. "/" .. maxAttempts .. " com " .. server.playing .. "/" .. server.maxPlayers .. " jogadores..."
-                    print("[SkyHub] 🎲 Tentando servidor: " .. server.playing .. "/" .. server.maxPlayers .. " jogadores")
-                    
-                    addServerToBlacklist(server.id)
-                    currentServerJobId = server.id
-                    saveJobIdToFile(currentServerJobId)
-                    
-                    -- Tenta teleportar com verificação de erro
-                    local teleportOk = safeTeleport(placeId, server.id)
-                    
-                    if teleportOk then
-                        print("[SkyHub] ✅ Teleporte iniciado com sucesso para: " .. server.id)
-                        teleportSuccess = true
-                        break
-                    else
-                        print("[SkyHub] ❌ Falha ao teleportar para: " .. server.id)
-                        -- Fecha popup de erro se existir
-                        closeErrorPopup()
-                        task.wait(1)
-                        -- Continua tentando o próximo servidor
-                    end
+                    selectedServer = server
+                    break
                 end
             end
             
-            if not teleportSuccess and hopActive then
-                statusLabel.Text = "Status: Todas as tentativas falharam, tentando novamente..."
-                print("[SkyHub] ⚠️ Todas as tentativas falharam, reiniciando busca...")
-                task.wait(3)
-                if hopActive then doServerHop() end
+            if selectedServer then
+                addServerToBlacklist(selectedServer.id)
+                statusLabel.Text = "Status: Teleportando para servidor aleatório com " .. selectedServer.playing .. "/" .. selectedServer.maxPlayers .. " jogadores..."
+                
+                -- SALVA O JOBID DO SERVIDOR QUE VAMOS ENTRAR
+                currentServerJobId = selectedServer.id
+                saveJobIdToFile(currentServerJobId)
+                print("[SkyHub] 🎲 Servidor aleatório escolhido: " .. selectedServer.playing .. "/" .. selectedServer.maxPlayers .. " jogadores")
+                print("[SkyHub] 📌 JobId salvo para este servidor: " .. currentServerJobId)
+                
+                pcall(function()
+                    if autoModeEnabled then
+                        writefile(folderName .. "/AutoMode.txt", "true")
+                    end
+                    TeleportService:TeleportToPlaceInstance(placeId, selectedServer.id, player)
+                end)
+                
+                task.wait(2)
+            else
+                statusLabel.Text = "Status: Nenhum servidor livre encontrado"
+                if autoModeEnabled and hopActive then
+                    task.wait(2)
+                    doServerHop()
+                end
             end
         else
             statusLabel.Text = "Status: Nenhum servidor disponível"
