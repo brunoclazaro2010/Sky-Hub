@@ -1115,11 +1115,10 @@ local ragBtn, ragCirc = createOption("Anti Ragdoll", 220)
 local hopBtn, hopCirc = createOption("Server Hop", 260)
 -- Botão do TP to Best foi removido pois agora está sempre ligado
 
--- ====================== ANTI RAGDOLL CORRIGIDO ======================
+-- ====================== ANTI RAGDOLL ======================
 local antiRagdollMode = nil
 local ragdollConnections = {}
 local cachedCharData = {}
-local lastPosition = nil -- Para detectar teleporte
 
 local function cacheCharacterData()
     local char = player.Character
@@ -1128,8 +1127,6 @@ local function cacheCharacterData()
     local root = char:FindFirstChild("HumanoidRootPart")
     if not hum or not root then return false end
     cachedCharData = { character = char, humanoid = hum, root = root }
-    -- Atualiza última posição
-    lastPosition = root.Position
     return true
 end
 
@@ -1177,22 +1174,6 @@ end
 local function v1HeartbeatLoop()
     while antiRagdollMode == "v1" and cachedCharData.humanoid and scriptRunning do
         task.wait()
-        
-        -- DETECTA TELEPORTE e recacheia automaticamente
-        local root = cachedCharData.root
-        if root and lastPosition then
-            local currentPos = root.Position
-            local distance = (currentPos - lastPosition).Magnitude
-            -- Se moveu mais de 100 studs instantaneamente (teleporte)
-            if distance > 100 then
-                print("[Anti-Ragdoll] Teleporte detectado! Recacheando...")
-                cacheCharacterData() -- Recacheia
-            end
-            lastPosition = currentPos
-        elseif root then
-            lastPosition = root.Position
-        end
-        
         if isRagdolled() then
             removeRagdollConstraints()
             forceExitRagdoll()
@@ -1219,7 +1200,6 @@ local function onCharacterAdded(char)
         if antiRagdollMode == "v1" then
             setupCameraBinding()
             task.spawn(v1HeartbeatLoop)
-            print("[Anti-Ragdoll] Proteção restaurada após respawn!")
         end
     end
 end
@@ -1233,7 +1213,6 @@ local function enableAntiRagdoll()
     table.insert(ragdollConnections, charConn)
     setupCameraBinding()
     task.spawn(v1HeartbeatLoop)
-    print("[Anti-Ragdoll] Proteção ativada!")
     return true
 end
 
@@ -1559,6 +1538,27 @@ createKickWidget()
 -- Inicializa o Anti-Bee & Anti-Disco (SEMPRE ATIVO)
 initAntiBeeDisco()
 
+-- ===== MODIFICAÇÃO: Desativa e ativa Anti-Ragdoll rapidamente ao iniciar =====
+task.spawn(function()
+    task.wait(2) -- Aguarda o script carregar completamente
+    print("[SkyHub] Reiniciando Anti-Ragdoll para garantir funcionamento...")
+    
+    -- Desativa se estiver ativo
+    if antiRagdollEnabled then
+        disableAntiRagdoll()
+        task.wait(0.1)
+    end
+    
+    -- Ativa novamente
+    antiRagdollEnabled = true
+    handleToggle(ragBtn, ragCirc, true)
+    enableAntiRagdoll()
+    saveSettings()
+    
+    print("[SkyHub] Anti-Ragdoll reiniciado com sucesso!")
+end)
+-- ===== FIM DA MODIFICAÇÃO =====
+
 -- Execução automática do TP to Best (SEMPRE ATIVO)
 local function autoTpToBest()
     -- tpToBestEnabled agora é sempre true
@@ -1622,4 +1622,3 @@ toggleMenu()
 
 print("[SkyHub] Carregado com sucesso - TP to Best SEMPRE ATIVO!")
 print("[SkyHub] Anti-Bee & Anti-Disco ATIVADO permanentemente!")
-print("[SkyHub] Anti-Ragdoll com detecção automática de teleporte!")
