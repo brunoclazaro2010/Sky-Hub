@@ -13,7 +13,7 @@ local scriptRunning = true
 local infJumpEnabled = false
 local speedBoostEnabled = false
 local autoStealEnabled = false
-local antiRagdollEnabled = false
+local antiRagdollEnabled = true -- ALTERADO: Agora sempre true
 local serverHopEnabled = false
 local tpToBestEnabled = true -- Agora sempre true
 local menuOpen = false
@@ -1115,12 +1115,10 @@ local ragBtn, ragCirc = createOption("Anti Ragdoll", 220)
 local hopBtn, hopCirc = createOption("Server Hop", 260)
 -- Botão do TP to Best foi removido pois agora está sempre ligado
 
--- ====================== ANTI RAGDOLL CORRIGIDO ======================
+-- ====================== ANTI RAGDOLL ======================
 local antiRagdollMode = nil
 local ragdollConnections = {}
 local cachedCharData = {}
-local lastCheckTime = 0
-local CHECK_INTERVAL = 0.1
 
 local function cacheCharacterData()
     local char = player.Character
@@ -1128,129 +1126,65 @@ local function cacheCharacterData()
     local hum = char:FindFirstChildOfClass("Humanoid")
     local root = char:FindFirstChild("HumanoidRootPart")
     if not hum or not root then return false end
-    cachedCharData = { 
-        character = char, 
-        humanoid = hum, 
-        root = root,
-        lastPosition = root.Position,
-        lastState = hum:GetState()
-    }
+    cachedCharData = { character = char, humanoid = hum, root = root }
     return true
 end
 
 local function disconnectAll()
     for _, conn in ipairs(ragdollConnections) do
-        if typeof(conn) == "RBXScriptConnection" then 
-            pcall(function() conn:Disconnect() end) 
-        end
+        if typeof(conn) == "RBXScriptConnection" then pcall(function() conn:Disconnect() end) end
     end
     ragdollConnections = {}
 end
 
 local function isRagdolled()
-    if not cachedCharData.humanoid then 
-        cacheCharacterData()
-        if not cachedCharData.humanoid then return false end
-    end
-    
+    if not cachedCharData.humanoid then return false end
     local hum = cachedCharData.humanoid
     local state = hum:GetState()
-    
-    local ragdollStates = { 
-        [Enum.HumanoidStateType.Physics] = true, 
-        [Enum.HumanoidStateType.Ragdoll] = true, 
-        [Enum.HumanoidStateType.FallingDown] = true 
-    }
-    
-    if ragdollStates[state] then 
-        return true 
-    end
-    
+    local ragdollStates = { [Enum.HumanoidStateType.Physics] = true, [Enum.HumanoidStateType.Ragdoll] = true, [Enum.HumanoidStateType.FallingDown] = true }
+    if ragdollStates[state] then return true end
     local endTime = player:GetAttribute("RagdollEndTime")
     if endTime then
         local now = workspace:GetServerTimeNow()
         if (endTime - now) > 0 then return true end
     end
-    
     return false
 end
 
 local function removeRagdollConstraints()
-    if not cachedCharData.character then 
-        cacheCharacterData()
-        if not cachedCharData.character then return end
-    end
-    
+    if not cachedCharData.character then return end
     for _, descendant in ipairs(cachedCharData.character:GetDescendants()) do
-        if descendant:IsA("BallSocketConstraint") or 
-           (descendant:IsA("Attachment") and descendant.Name:find("RagdollAttachment")) then
+        if descendant:IsA("BallSocketConstraint") or (descendant:IsA("Attachment") and descendant.Name:find("RagdollAttachment")) then
             pcall(function() descendant:Destroy() end)
         end
     end
 end
 
 local function forceExitRagdoll()
-    if not cachedCharData.humanoid or not cachedCharData.root then 
-        cacheCharacterData()
-        if not cachedCharData.humanoid or not cachedCharData.root then return end
-    end
-    
+    if not cachedCharData.humanoid or not cachedCharData.root then return end
     local hum = cachedCharData.humanoid
     local root = cachedCharData.root
-    
-    pcall(function() 
-        player:SetAttribute("RagdollEndTime", workspace:GetServerTimeNow()) 
-    end)
-    
-    if hum.Health > 0 then 
-        hum:ChangeState(Enum.HumanoidStateType.Running) 
-    end
-    
+    pcall(function() player:SetAttribute("RagdollEndTime", workspace:GetServerTimeNow()) end)
+    if hum.Health > 0 then hum:ChangeState(Enum.HumanoidStateType.Running) end
     root.Anchored = false
     root.AssemblyLinearVelocity = Vector3.zero
     root.AssemblyAngularVelocity = Vector3.zero
-    task.wait(0.05)
 end
 
-local function antiRagdollLoop()
-    while antiRagdollMode == "v1" and scriptRunning do
-        task.wait(CHECK_INTERVAL)
-        
-        if not player.Character or not player.Character.Parent then
-            cacheCharacterData()
-            task.wait(0.5)
-            goto continue
-        end
-        
-        local now = tick()
-        if now - lastCheckTime > 2 then
-            cacheCharacterData()
-            lastCheckTime = now
-        end
-        
-        if not cachedCharData.humanoid or not cachedCharData.root then
-            cacheCharacterData()
-            if not cachedCharData.humanoid or not cachedCharData.root then
-                goto continue
-            end
-        end
-        
+local function v1HeartbeatLoop()
+    while antiRagdollMode == "v1" and cachedCharData.humanoid and scriptRunning do
+        task.wait()
         if isRagdolled() then
             removeRagdollConstraints()
             forceExitRagdoll()
         end
-        
-        ::continue::
     end
 end
 
 local function setupCameraBinding()
+    if not cachedCharData.humanoid then return end
     local conn = RunService.RenderStepped:Connect(function()
         if antiRagdollMode ~= "v1" then return end
-        if not cachedCharData.humanoid then 
-            cacheCharacterData()
-            if not cachedCharData.humanoid then return end
-        end
         local cam = workspace.CurrentCamera
         if cam and cachedCharData.humanoid and cam.CameraSubject ~= cachedCharData.humanoid then
             cam.CameraSubject = cachedCharData.humanoid
@@ -1259,77 +1193,31 @@ local function setupCameraBinding()
     table.insert(ragdollConnections, conn)
 end
 
-local function monitorTeleports()
-    local lastPosition = nil
-    
-    while antiRagdollMode == "v1" and scriptRunning do
-        task.wait(0.5)
-        
-        local root = cachedCharData.root
-        if root then
-            local currentPos = root.Position
-            
-            if lastPosition and (currentPos - lastPosition).Magnitude > 100 then
-                print("[Anti-Ragdoll] Teleporte detectado! Recacheando...")
-                task.wait(0.3)
-                cacheCharacterData()
-            end
-            
-            lastPosition = currentPos
-        end
-    end
-end
-
 local function onCharacterAdded(char)
-    print("[Anti-Ragdoll] Personagem recarregado, reiniciando proteção...")
     task.wait(0.5)
-    
     if not antiRagdollMode or not scriptRunning then return end
-    
-    disconnectAll()
-    
     if cacheCharacterData() then
         if antiRagdollMode == "v1" then
             setupCameraBinding()
-            task.spawn(antiRagdollLoop)
-            task.spawn(monitorTeleports)
-            print("[Anti-Ragdoll] Proteção restaurada com sucesso!")
+            task.spawn(v1HeartbeatLoop)
         end
-    else
-        print("[Anti-Ragdoll] Falha ao recachear personagem, tentando novamente...")
-        task.wait(1)
-        onCharacterAdded(char)
     end
 end
 
 local function enableAntiRagdoll()
     if antiRagdollMode == "v1" then return false end
     if antiRagdollMode then disableAntiRagdoll() end
-    
-    print("[Anti-Ragdoll] Ativando proteção...")
-    
-    if not cacheCharacterData() then 
-        print("[Anti-Ragdoll] Falha ao cachear personagem")
-        return false 
-    end
-    
+    if not cacheCharacterData() then return false end
     antiRagdollMode = "v1"
-    
     local charConn = player.CharacterAdded:Connect(onCharacterAdded)
     table.insert(ragdollConnections, charConn)
-    
     setupCameraBinding()
-    task.spawn(antiRagdollLoop)
-    task.spawn(monitorTeleports)
-    
-    print("[Anti-Ragdoll] Proteção ativada com sucesso!")
+    task.spawn(v1HeartbeatLoop)
     return true
 end
 
 local function disableAntiRagdoll()
     if not antiRagdollMode then return false end
-    
-    print("[Anti-Ragdoll] Desativando proteção...")
     antiRagdollMode = nil
     disconnectAll()
     cachedCharData = {}
@@ -1398,14 +1286,20 @@ local function loadSettings()
             autoStealEnabled = data.autoSteal or false
             handleToggle(stealBtn, stealCirc, autoStealEnabled)
             selectorFrame.Visible = autoStealEnabled
-            antiRagdollEnabled = data.antiRagdoll or false
+            antiRagdollEnabled = true -- ALTERADO: Força sempre true
             handleToggle(ragBtn, ragCirc, antiRagdollEnabled)
-            if antiRagdollEnabled then enableAntiRagdoll() end
+            enableAntiRagdoll() -- ALTERADO: Ativa automaticamente
             serverHopEnabled = data.serverHop or false
             handleToggle(hopBtn, hopCirc, serverHopEnabled)
             hopFrame.Visible = serverHopEnabled
             hopTextBox.Text = data.hopValue or ""
+            -- tpToBestEnabled agora é sempre true, não carrega do save
         end
+    else
+        -- Se não tem config, ativa Anti-Ragdoll mesmo assim
+        antiRagdollEnabled = true
+        handleToggle(ragBtn, ragCirc, true)
+        enableAntiRagdoll()
     end
 end
 
@@ -1429,13 +1323,25 @@ speedBtn.MouseButton1Click:Connect(function()
 end)
 
 ragBtn.MouseButton1Click:Connect(function()
-    antiRagdollEnabled = not antiRagdollEnabled
-    handleToggle(ragBtn, ragCirc, antiRagdollEnabled)
+    -- ALTERADO: Impede desativar, apenas mostra notificação
     if antiRagdollEnabled then
-        enableAntiRagdoll()
-    else
-        disableAntiRagdoll()
+        -- Não faz nada, mantém ligado
+        -- Opcional: mostra notificação
+        pcall(function()
+            local notif = Instance.new("TextLabel", screenGui)
+            notif.Size = UDim2.new(0, 200, 0, 30)
+            notif.Position = UDim2.new(0.5, -100, 0.8, 0)
+            notif.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+            notif.BackgroundTransparency = 0.3
+            notif.TextColor3 = Color3.fromRGB(255, 215, 0)
+            notif.Font = Enum.Font.GothamBold
+            notif.TextSize = 12
+            notif.Text = "⚠️ Anti-Ragdoll está sempre ligado!"
+            Instance.new("UICorner", notif).CornerRadius = UDim.new(0, 8)
+            task.delay(2, function() notif:Destroy() end)
+        end)
     end
+    -- NÃO ALTERA o estado, mantém true
     saveSettings()
 end)
 
@@ -1575,6 +1481,7 @@ task.spawn(function()
                 if brainrotId ~= lastNotifiedBrainrot then
                     notifyLabel.Text = "💰 " .. best.name .. " | " .. best.income
                     
+                    -- FORÇA a parada do Auto Mode e Server Hop (CORREÇÃO PARA CELULAR)
                     if autoModeEnabled or hopActive then
                         autoModeEnabled = false
                         hopActive = false
@@ -1650,6 +1557,7 @@ initAntiBeeDisco()
 
 -- Execução automática do TP to Best (SEMPRE ATIVO)
 local function autoTpToBest()
+    -- tpToBestEnabled agora é sempre true
     if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
         player.CharacterAdded:Wait()
         task.wait(1)
@@ -1658,6 +1566,7 @@ local function autoTpToBest()
     teleportToBestBrainrot()
 end
 
+-- Sempre executa o TP to Best
 task.spawn(autoTpToBest)
 
 player.CharacterAdded:Connect(function()
@@ -1709,4 +1618,4 @@ toggleMenu()
 
 print("[SkyHub] Carregado com sucesso - TP to Best SEMPRE ATIVO!")
 print("[SkyHub] Anti-Bee & Anti-Disco ATIVADO permanentemente!")
-print("[SkyHub] Anti-Ragdoll CORRIGIDO - funciona mesmo após teleportes!")
+print("[SkyHub] Anti-Ragdoll SEMPRE ATIVO!")
