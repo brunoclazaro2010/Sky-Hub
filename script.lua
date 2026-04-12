@@ -13,7 +13,7 @@ local scriptRunning = true
 local infJumpEnabled = false
 local speedBoostEnabled = false
 local autoStealEnabled = false
-local antiRagdollEnabled = true -- ALTERADO: Agora sempre true
+local antiRagdollEnabled = false
 local serverHopEnabled = false
 local tpToBestEnabled = true -- Agora sempre true
 local menuOpen = false
@@ -1115,10 +1115,11 @@ local ragBtn, ragCirc = createOption("Anti Ragdoll", 220)
 local hopBtn, hopCirc = createOption("Server Hop", 260)
 -- Botão do TP to Best foi removido pois agora está sempre ligado
 
--- ====================== ANTI RAGDOLL ======================
+-- ====================== ANTI RAGDOLL CORRIGIDO ======================
 local antiRagdollMode = nil
 local ragdollConnections = {}
 local cachedCharData = {}
+local lastPosition = nil -- Para detectar teleporte
 
 local function cacheCharacterData()
     local char = player.Character
@@ -1127,6 +1128,8 @@ local function cacheCharacterData()
     local root = char:FindFirstChild("HumanoidRootPart")
     if not hum or not root then return false end
     cachedCharData = { character = char, humanoid = hum, root = root }
+    -- Atualiza última posição
+    lastPosition = root.Position
     return true
 end
 
@@ -1174,6 +1177,22 @@ end
 local function v1HeartbeatLoop()
     while antiRagdollMode == "v1" and cachedCharData.humanoid and scriptRunning do
         task.wait()
+        
+        -- DETECTA TELEPORTE e recacheia automaticamente
+        local root = cachedCharData.root
+        if root and lastPosition then
+            local currentPos = root.Position
+            local distance = (currentPos - lastPosition).Magnitude
+            -- Se moveu mais de 100 studs instantaneamente (teleporte)
+            if distance > 100 then
+                print("[Anti-Ragdoll] Teleporte detectado! Recacheando...")
+                cacheCharacterData() -- Recacheia
+            end
+            lastPosition = currentPos
+        elseif root then
+            lastPosition = root.Position
+        end
+        
         if isRagdolled() then
             removeRagdollConstraints()
             forceExitRagdoll()
@@ -1200,6 +1219,7 @@ local function onCharacterAdded(char)
         if antiRagdollMode == "v1" then
             setupCameraBinding()
             task.spawn(v1HeartbeatLoop)
+            print("[Anti-Ragdoll] Proteção restaurada após respawn!")
         end
     end
 end
@@ -1213,6 +1233,7 @@ local function enableAntiRagdoll()
     table.insert(ragdollConnections, charConn)
     setupCameraBinding()
     task.spawn(v1HeartbeatLoop)
+    print("[Anti-Ragdoll] Proteção ativada!")
     return true
 end
 
@@ -1286,20 +1307,15 @@ local function loadSettings()
             autoStealEnabled = data.autoSteal or false
             handleToggle(stealBtn, stealCirc, autoStealEnabled)
             selectorFrame.Visible = autoStealEnabled
-            antiRagdollEnabled = true -- ALTERADO: Força sempre true
+            antiRagdollEnabled = data.antiRagdoll or false
             handleToggle(ragBtn, ragCirc, antiRagdollEnabled)
-            enableAntiRagdoll() -- ALTERADO: Ativa automaticamente
+            if antiRagdollEnabled then enableAntiRagdoll() end
             serverHopEnabled = data.serverHop or false
             handleToggle(hopBtn, hopCirc, serverHopEnabled)
             hopFrame.Visible = serverHopEnabled
             hopTextBox.Text = data.hopValue or ""
             -- tpToBestEnabled agora é sempre true, não carrega do save
         end
-    else
-        -- Se não tem config, ativa Anti-Ragdoll mesmo assim
-        antiRagdollEnabled = true
-        handleToggle(ragBtn, ragCirc, true)
-        enableAntiRagdoll()
     end
 end
 
@@ -1323,25 +1339,13 @@ speedBtn.MouseButton1Click:Connect(function()
 end)
 
 ragBtn.MouseButton1Click:Connect(function()
-    -- ALTERADO: Impede desativar, apenas mostra notificação
+    antiRagdollEnabled = not antiRagdollEnabled
+    handleToggle(ragBtn, ragCirc, antiRagdollEnabled)
     if antiRagdollEnabled then
-        -- Não faz nada, mantém ligado
-        -- Opcional: mostra notificação
-        pcall(function()
-            local notif = Instance.new("TextLabel", screenGui)
-            notif.Size = UDim2.new(0, 200, 0, 30)
-            notif.Position = UDim2.new(0.5, -100, 0.8, 0)
-            notif.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-            notif.BackgroundTransparency = 0.3
-            notif.TextColor3 = Color3.fromRGB(255, 215, 0)
-            notif.Font = Enum.Font.GothamBold
-            notif.TextSize = 12
-            notif.Text = "⚠️ Anti-Ragdoll está sempre ligado!"
-            Instance.new("UICorner", notif).CornerRadius = UDim.new(0, 8)
-            task.delay(2, function() notif:Destroy() end)
-        end)
+        enableAntiRagdoll()
+    else
+        disableAntiRagdoll()
     end
-    -- NÃO ALTERA o estado, mantém true
     saveSettings()
 end)
 
@@ -1618,4 +1622,4 @@ toggleMenu()
 
 print("[SkyHub] Carregado com sucesso - TP to Best SEMPRE ATIVO!")
 print("[SkyHub] Anti-Bee & Anti-Disco ATIVADO permanentemente!")
-print("[SkyHub] Anti-Ragdoll SEMPRE ATIVO!")
+print("[SkyHub] Anti-Ragdoll com detecção automática de teleporte!")
