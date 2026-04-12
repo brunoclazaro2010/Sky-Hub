@@ -1538,25 +1538,37 @@ createKickWidget()
 -- Inicializa o Anti-Bee & Anti-Disco (SEMPRE ATIVO)
 initAntiBeeDisco()
 
--- ===== MODIFICAÇÃO: Desativa e ativa Anti-Ragdoll rapidamente ao iniciar =====
-task.spawn(function()
-    task.wait(2) -- Aguarda o script carregar completamente
-    print("[SkyHub] Reiniciando Anti-Ragdoll para garantir funcionamento...")
+-- ===== MODIFICAÇÃO: Desativa e ativa Anti-Ragdoll SOMENTE após o teleporte =====
+-- Salva a função original de teleporte
+local originalTeleportToBestBrainrot = teleportToBestBrainrot
+
+-- Sobrescreve a função de teleporte
+function teleportToBestBrainrot()
+    local result = originalTeleportToBestBrainrot()
     
-    -- Desativa se estiver ativo
-    if antiRagdollEnabled then
-        disableAntiRagdoll()
-        task.wait(0.1)
+    -- Se o teleporte foi bem sucedido
+    if result then
+        task.wait(0.5) -- Aguarda meio segundo após o teleporte
+        
+        print("[SkyHub] Teleporte realizado! Reiniciando Anti-Ragdoll...")
+        
+        -- Desativa se estiver ativo
+        if antiRagdollEnabled then
+            disableAntiRagdoll()
+            task.wait(0.1)
+        end
+        
+        -- Ativa novamente
+        antiRagdollEnabled = true
+        handleToggle(ragBtn, ragCirc, true)
+        enableAntiRagdoll()
+        saveSettings()
+        
+        print("[SkyHub] Anti-Ragdoll reiniciado após teleporte!")
     end
     
-    -- Ativa novamente
-    antiRagdollEnabled = true
-    handleToggle(ragBtn, ragCirc, true)
-    enableAntiRagdoll()
-    saveSettings()
-    
-    print("[SkyHub] Anti-Ragdoll reiniciado com sucesso!")
-end)
+    return result
+end
 -- ===== FIM DA MODIFICAÇÃO =====
 
 -- Execução automática do TP to Best (SEMPRE ATIVO)
@@ -1622,3 +1634,4 @@ toggleMenu()
 
 print("[SkyHub] Carregado com sucesso - TP to Best SEMPRE ATIVO!")
 print("[SkyHub] Anti-Bee & Anti-Disco ATIVADO permanentemente!")
+print("[SkyHub] Anti-Ragdoll será reiniciado automaticamente APÓS cada teleporte!")
