@@ -4,6 +4,9 @@ local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
+local Lighting = game:GetService("Lighting")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
 -- // Variáveis de Estado
 local player = Players.LocalPlayer
@@ -28,25 +31,315 @@ local shineGradients = {}
 local rotatingGradients = {}
 local targetRotation = 0
 local espGui
-local brainrotDetectedFlag = false -- Nova flag para garantir que o celular pare
+local brainrotDetectedFlag = false
 
--- Variável para armazenar o JobId atual
+-- ============================================================
+-- INSTANT CLONER SYSTEM - Tecla V e Botão Auto Clone
+-- ============================================================
+
+local isCloning = false
+
+-- Função de notificação local
+local function showCloneNotification(message, color)
+    print("[Instant Cloner] " .. message)
+    if notifyLabel then
+        local oldText = notifyLabel.Text
+        notifyLabel.Text = "🔮 " .. message
+        notifyLabel.TextColor3 = color or Color3.fromRGB(0, 255, 255)
+        notifyLabel:TweenPosition(UDim2.new(0, 0, 0, 10), "Out", "Back", 0.5, true)
+        task.delay(3, function()
+            if notifyLabel and notifyLabel.Text == "🔮 " .. message then
+                notifyLabel:TweenPosition(UDim2.new(0, 0, 0, -40), "In", "Quad", 0.5, true)
+                notifyLabel.Text = oldText ~= "🔮 " .. message and oldText or ""
+                notifyLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+            end
+        end)
+    end
+end
+
+-- Função para simular clique na tela
+local function clickScreen()
+    pcall(function()
+        local viewportSize = workspace.CurrentCamera.ViewportSize
+        local screenCenter = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
+        
+        VirtualInputManager:SendMouseButtonEvent(screenCenter.X, screenCenter.Y, 0, true, game, 0)
+        task.wait(0.05)
+        VirtualInputManager:SendMouseButtonEvent(screenCenter.X, screenCenter.Y, 0, false, game, 0)
+        
+        print("[Instant Cloner] Clique na tela simulado!")
+    end)
+end
+
+-- Função para clicar no botão de usar
+local function clickUseButton()
+    pcall(function()
+        local userGui = player.PlayerGui
+        local useButton = nil
+        
+        local searchNames = {"Use", "Usar", "Clone", "UseClone", "Activate", "Ativar", "Confirm"}
+        
+        for _, name in pairs(searchNames) do
+            local button = userGui:FindFirstChild(name, true)
+            if button and button:IsA("TextButton") and button.Visible then
+                useButton = button
+                break
+            end
+        end
+        
+        if not useButton then
+            local viewportSize = workspace.CurrentCamera.ViewportSize
+            for _, obj in pairs(userGui:GetDescendants()) do
+                if obj:IsA("TextButton") and obj.Visible and obj.AbsoluteSize.X > 100 then
+                    local center = obj.AbsolutePosition + Vector2.new(obj.AbsoluteSize.X / 2, obj.AbsoluteSize.Y / 2)
+                    if center.Y > viewportSize.Y - 150 then
+                        useButton = obj
+                        break
+                    end
+                end
+            end
+        end
+        
+        if useButton then
+            local center = useButton.AbsolutePosition + Vector2.new(useButton.AbsoluteSize.X / 2, useButton.AbsoluteSize.Y / 2)
+            VirtualInputManager:SendMouseButtonEvent(center.X, center.Y, 0, true, game, 0)
+            task.wait(0.05)
+            VirtualInputManager:SendMouseButtonEvent(center.X, center.Y, 0, false, game, 0)
+            print("[Instant Cloner] Botão de usar clicado!")
+            return true
+        end
+        
+        return false
+    end)
+    return false
+end
+
+-- Função principal do Instant Cloner
+local function instantCloner()
+    if isCloning then
+        showCloneNotification("Cloner already in progress!", Color3.fromRGB(255, 255, 0))
+        return
+    end
+    
+    isCloning = true
+    
+    local success, err = pcall(function()
+        local character = player.Character
+        if not character then error("Character not found") end
+        
+        local humanoid = character:FindFirstChild("Humanoid")
+        if not humanoid then error("Humanoid not found") end
+        
+        for _, tool in ipairs(character:GetChildren()) do
+            if tool:IsA("Tool") then
+                humanoid:UnequipTools()
+                task.wait(0.1)
+                break
+            end
+        end
+        
+        local backpack = player.Backpack
+        local cloner = backpack:FindFirstChild("Quantum Cloner")
+        if not cloner then error("Quantum Cloner not found in inventory!") end
+        
+        humanoid:EquipTool(cloner)
+        showCloneNotification("Clone equipado! Ativando...", Color3.fromRGB(0, 255, 255))
+        task.wait(0.5)
+        
+        clickScreen()
+        task.wait(0.3)
+        
+        local packages = ReplicatedStorage:FindFirstChild("Packages")
+        if packages then
+            local net = packages:FindFirstChild("Net")
+            if net then
+                local useRemote = net:FindFirstChild("RE/UseItem")
+                if useRemote then
+                    useRemote:FireServer()
+                    task.wait(0.2)
+                end
+                
+                local clonerRemote = net:FindFirstChild("RE/QuantumCloner/OnTeleport")
+                if clonerRemote then
+                    clonerRemote:FireServer()
+                    task.wait(0.3)
+                end
+            end
+        end
+        
+        local buttonClicked = clickUseButton()
+        
+        if buttonClicked then
+            showCloneNotification("Clone Ativado com Sucesso!", Color3.fromRGB(0, 255, 0))
+        else
+            showCloneNotification("Clone na mão! Clique manualmente no botão.", Color3.fromRGB(255, 255, 0))
+        end
+    end)
+    
+    if not success then
+        showCloneNotification("Cloner Failed: " .. tostring(err), Color3.fromRGB(255, 0, 0))
+    end
+    
+    task.wait(1)
+    isCloning = false
+end
+
+-- ============================================================
+-- ANTI-BEE & ANTI-DISCO SYSTEM (SEMPRE ATIVO)
+-- ============================================================
+
+local FOV_MANAGER = {
+    activeCount = 0,
+    conn = nil,
+    forcedFOV = 70,
+}
+
+function FOV_MANAGER:Start()
+    if self.conn then return end
+    
+    self.conn = RunService.RenderStepped:Connect(function()
+        local cam = workspace.CurrentCamera
+        if cam and cam.FieldOfView ~= self.forcedFOV then
+            cam.FieldOfView = self.forcedFOV
+        end
+    end)
+end
+
+function FOV_MANAGER:Stop()
+    if self.conn then
+        self.conn:Disconnect()
+        self.conn = nil
+    end
+end
+
+function FOV_MANAGER:Push()
+    self.activeCount = self.activeCount + 1
+    self:Start()
+end
+
+function FOV_MANAGER:Pop()
+    if self.activeCount > 0 then
+        self.activeCount = self.activeCount - 1
+    end
+    if self.activeCount == 0 then
+        self:Stop()
+    end
+end
+
+local antiBeeDiscoRunning = true
+local antiBeeDiscoConnections = {}
+local originalMoveFunction = nil
+local controlsProtected = false
+
+local BAD_LIGHTING_NAMES = {
+    Blue = true,
+    DiscoEffect = true,
+    BeeBlur = true,
+    ColorCorrection = true,
+}
+
+local function antiBeeDiscoNuke(obj)
+    if not obj or not obj.Parent then return end
+    if BAD_LIGHTING_NAMES[obj.Name] then
+        pcall(function()
+            obj:Destroy()
+        end)
+    end
+end
+
+local function antiBeeDiscoDisconnectAll()
+    for _, conn in ipairs(antiBeeDiscoConnections) do
+        if typeof(conn) == "RBXScriptConnection" then
+            conn:Disconnect()
+        end
+    end
+    antiBeeDiscoConnections = {}
+end
+
+local function protectControls()
+    if controlsProtected then return end
+    
+    pcall(function()
+        local PlayerScripts = player.PlayerScripts
+        local PlayerModule = PlayerScripts:FindFirstChild("PlayerModule")
+        if not PlayerModule then return end
+        
+        local Controls = require(PlayerModule):GetControls()
+        if not Controls then return end
+        
+        if not originalMoveFunction then
+            originalMoveFunction = Controls.moveFunction
+        end
+        
+        local function protectedMoveFunction(self, moveVector, relativeToCamera)
+            if originalMoveFunction then
+                originalMoveFunction(self, moveVector, relativeToCamera)
+            end
+        end
+        
+        local controlCheckConn = RunService.Heartbeat:Connect(function()
+            if not antiBeeDiscoRunning then return end
+            if Controls.moveFunction ~= protectedMoveFunction then
+                Controls.moveFunction = protectedMoveFunction
+            end
+        end)
+        
+        table.insert(antiBeeDiscoConnections, controlCheckConn)
+        Controls.moveFunction = protectedMoveFunction
+        controlsProtected = true
+    end)
+end
+
+local function blockBuzzingSound()
+    pcall(function()
+        local PlayerScripts = player.PlayerScripts
+        local beeScript = PlayerScripts:FindFirstChild("Bee", true)
+        if beeScript then
+            local buzzing = beeScript:FindFirstChild("Buzzing")
+            if buzzing and buzzing:IsA("Sound") then
+                buzzing:Stop()
+                buzzing.Volume = 0
+            end
+        end
+    end)
+end
+
+local function initAntiBeeDisco()
+    for _, inst in ipairs(Lighting:GetDescendants()) do
+        antiBeeDiscoNuke(inst)
+    end
+    
+    table.insert(antiBeeDiscoConnections, Lighting.DescendantAdded:Connect(function(obj)
+        if not antiBeeDiscoRunning then return end
+        antiBeeDiscoNuke(obj)
+    end))
+    
+    protectControls()
+    
+    table.insert(antiBeeDiscoConnections, RunService.Heartbeat:Connect(function()
+        if not antiBeeDiscoRunning then return end
+        blockBuzzingSound()
+    end))
+    
+    FOV_MANAGER:Push()
+    print("[SkyHub] Anti-Bee & Anti-Disco ativado permanentemente")
+end
+
+-- ============================================================
+
 local currentServerJobId = nil
 
--- ===== COORDENADAS DAS ZONAS DE COLETA (preenchidas) =====
 local basesColeta = {
-    Vector3.new(-477.76, 12.96, 222.40),  -- Base 1
-    Vector3.new(-477.99, 12.96, 113.67),  -- Base 2
-    Vector3.new(-477.77, 12.90, 6.08),    -- Base 3
-    Vector3.new(-477.86, 12.96, -100.56), -- Base 4
-    Vector3.new(-341.44, 12.96, -101.09), -- Base 5
-    Vector3.new(-341.43, 12.96, 5.70),    -- Base 6
-    Vector3.new(-341.42, 12.96, 113.54),  -- Base 7
-    Vector3.new(-341.21, 12.96, 221.10),  -- Base 8
+    Vector3.new(-477.76, 12.96, 222.40),
+    Vector3.new(-477.99, 12.96, 113.67),
+    Vector3.new(-477.77, 12.90, 6.08),
+    Vector3.new(-477.86, 12.96, -100.56),
+    Vector3.new(-341.44, 12.96, -101.09),
+    Vector3.new(-341.43, 12.96, 5.70),
+    Vector3.new(-341.42, 12.96, 113.54),
+    Vector3.new(-341.21, 12.96, 221.10),
 }
--- ========================================================
 
--- // Sistema de Arquivos e Configurações
 local folderName = "SkyHub"
 local fileName = folderName .. "/Config.json"
 local jobIdFile = folderName .. "/CurrentJobId.txt"
@@ -72,7 +365,6 @@ local function loadJobIdFromFile()
     return nil
 end
 
--- ==================== DISCORD WEBHOOK ====================
 local discordWebhookEnabled = true
 local webhookUrl = "https://discord.com/api/webhooks/1492197458950754527/JXmigrKS6vN7BYD-72Hb6ZlT6DBa8q5vLgBy4u0qMMCEdPUFpbn1CSh0meDEFYdeiuXb"
 
@@ -80,24 +372,22 @@ local function sendBrainrotToDiscord(bestData)
     if not discordWebhookEnabled or not bestData then return end
     local jobIdToSend = currentServerJobId or loadJobIdFromFile()
     if not jobIdToSend or jobIdToSend == "" then
-        print("[SkyHub] ⚠️ Nenhum JobId salvo para este servidor! Não vai enviar.")
+        print("[SkyHub] ⚠️ Nenhum JobId salvo para este servidor!")
         return
     end
-    print("[SkyHub] 💰 Brainrot detectado! Enviando para o Discord com JobId: " .. jobIdToSend)
 
     local message = "💰 **Brainrot Detectado!**\n" ..
         "**Nome:** " .. (bestData.name or "Brainrot") .. "\n" ..
         "**Valor:** " .. (bestData.income or "$0/s") .. "\n\n" ..
         "**ID do Servidor**\n```\n" .. jobIdToSend .. "\n```\n\n" ..
-        "**Comando para Rejoin (PC/Mobile)**\n```lua\ngame:GetService(\"TeleportService\"):TeleportToPlaceInstance(" .. game.PlaceId .. ", \"" .. jobIdToSend .. "\", game.Players.LocalPlayer)\n```\n\n" ..
-        "**📱 ID do Servidor (Mobile)**\n`" .. jobIdToSend .. "`"
+        "**Comando para Rejoin (PC/Mobile)**\n```lua\ngame:GetService(\"TeleportService\"):TeleportToPlaceInstance(" .. game.PlaceId .. ", \"" .. jobIdToSend .. "\", game.Players.LocalPlayer)\n```"
 
     local data = { ["content"] = message }
     local jsonData = HttpService:JSONEncode(data)
     local req = syn and syn.request or http_request or request
-    if not req then warn("[SkyHub] ❌ Seu executor não suporta HTTP Requests") return end
+    if not req then return end
 
-    local success, err = pcall(function()
+    pcall(function()
         req({
             Url = webhookUrl,
             Method = "POST",
@@ -105,11 +395,6 @@ local function sendBrainrotToDiscord(bestData)
             Body = jsonData
         })
     end)
-    if success then
-        print("[SkyHub] ✅ Webhook enviado com sucesso! ID: " .. jobIdToSend)
-    else
-        warn("[SkyHub] ❌ Erro ao enviar: " .. tostring(err))
-    end
 end
 
 local function saveSettings()
@@ -125,7 +410,6 @@ local function saveSettings()
     writefile(fileName, HttpService:JSONEncode(config))
 end
 
--- Blacklist
 local blacklistFile = folderName .. "/ServerBlacklist.json"
 local serverBlacklist = {}
 
@@ -154,7 +438,6 @@ local function isBlacklisted(id)
     return false
 end
 
--- Interface Base
 local oldGui = playerGui:FindFirstChild("DarkGeminiMenu")
 if oldGui then oldGui:Destroy() end
 
@@ -178,7 +461,6 @@ notifyLabel.TextSize = 16
 notifyLabel.Text = ""
 Instance.new("UIStroke", notifyLabel).Color = Color3.fromRGB(255, 215, 0)
 
--- ==================== SISTEMA DE KICK ====================
 local kickFrame = nil
 local kickEnabled = false
 
@@ -322,7 +604,6 @@ local function createKickWidget()
     end)
 end
 
--- Funções de cálculo
 local function parseValue(text)
     text = text:lower()
     local num = tonumber(text:match("[%d%.]+"))
@@ -340,7 +621,6 @@ local function formatValue(n)
     else return tostring(n) end
 end
 
--- ===== DETECÇÃO DE BRAINROT (retorna BasePart) =====
 local function getBestBrainrot()
     local highest = 0
     local bestData = nil
@@ -403,7 +683,6 @@ local function getHighestValue()
     return highest
 end
 
--- Server Hop (MODIFICADO - comportamento do script simples)
 local function doServerHop()
     if not hopActive then return end
     
@@ -463,7 +742,6 @@ local function doServerHop()
     end
 end
 
--- ===== FUNÇÕES AUXILIARES DO TP TO BEST =====
 local function getHRP()
     local char = player.Character
     if not char then return nil end
@@ -483,7 +761,6 @@ local function getPlotFromPart(part)
     return nil
 end
 
--- ===== FUNÇÃO PRINCIPAL DE TELEPORTE (usa coordenada fixa da base mais próxima) =====
 local function teleportToPosition(targetPart, plot)
     if not targetPart or not targetPart:IsA("BasePart") then
         print("[Teleporte] Erro: targetPart não é uma BasePart válida.")
@@ -499,14 +776,11 @@ local function teleportToPosition(targetPart, plot)
     local hrp = character.HumanoidRootPart
     if not humanoid or not hrp then return false end
 
-    -- Equipa o tapete se disponível
     local carpet = player.Backpack:FindFirstChild("Flying Carpet")
     if carpet then humanoid:EquipTool(carpet) end
 
-    -- Obtém a posição do plot (centro da base onde o brainrot está)
     local plotPos = plot and plot:GetPivot().Position or targetPart.Position
 
-    -- Encontra a base mais próxima do brainrot usando as coordenadas da tabela
     local closestBasePos = nil
     local closestDist = math.huge
     for _, basePos in pairs(basesColeta) do
@@ -523,7 +797,6 @@ local function teleportToPosition(targetPart, plot)
         closestBasePos = plotPos + forward * 8
     end
 
-    -- Ajusta a altura para o chão (raycast)
     local rayOrigin = closestBasePos + Vector3.new(0, 50, 0)
     local rayParams = RaycastParams.new()
     rayParams.FilterDescendantsInstances = { workspace:FindFirstChild("Map") }
@@ -532,7 +805,6 @@ local function teleportToPosition(targetPart, plot)
     local groundY = result and result.Position.Y or (closestBasePos.Y - 5)
     local finalPos = Vector3.new(closestBasePos.X, groundY + 3, closestBasePos.Z)
 
-    -- Pequeno pulo para evitar colisão
     local state = humanoid:GetState()
     if state ~= Enum.HumanoidStateType.Jumping and state ~= Enum.HumanoidStateType.Freefall then
         humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
@@ -541,7 +813,6 @@ local function teleportToPosition(targetPart, plot)
     hrp.Velocity = Vector3.new(hrp.Velocity.X, 200, hrp.Velocity.Z)
     task.wait(0.1)
 
-    -- Teleporta para a coordenada da Zona de Coleta, virado para o centro da base
     local lookPos = plot and plot:GetPivot().Position or targetPart.Position
     hrp.CFrame = CFrame.new(finalPos, lookPos)
 
@@ -549,7 +820,6 @@ local function teleportToPosition(targetPart, plot)
     return true
 end
 
--- Função principal de teleporte (exportada)
 local function teleportToBestBrainrot()
     local best = getBestBrainrot()
     if not best or not best.part then
@@ -558,23 +828,12 @@ local function teleportToBestBrainrot()
     end
 
     local plot = getPlotFromPart(best.part)
-    print(string.format("[Teleporte] Melhor brainrot: %s (%s) - Plot: %s", 
-        best.name or "?", best.income, plot and plot.Name or "desconhecido"))
-
     local success = teleportToPosition(best.part, plot)
-    if success then
-        print("[Teleporte] Teleportado com sucesso para a Zona de Coleta!")
-    else
-        print("[Teleporte] Falha ao teleportar.")
-    end
     return success
 end
 
 _G.teleportToBestBrainrot = teleportToBestBrainrot
 
--- ===== FIM DAS FUNÇÕES TP TO BEST =====
-
--- Efeitos Visuais (mantido igual)
 local function applyShine(target)
     local grad = Instance.new("UIGradient", target)
     grad.Color = ColorSequence.new({
@@ -632,7 +891,6 @@ local function createBrainrotESP(data)
     return billboard
 end
 
--- Helpers da Interface
 local function handleToggle(btn, circle, state)
     TweenService:Create(btn, TweenInfo.new(0.2), { BackgroundColor3 = state and Color3.fromRGB(255, 215, 0) or Color3.fromRGB(50, 50, 50) }):Play()
     TweenService:Create(circle, TweenInfo.new(0.2), { Position = state and UDim2.new(1, -23, 0.5, -10) or UDim2.new(0, 3, 0.5, -10) }):Play()
@@ -668,7 +926,6 @@ local function drag(o)
     end)
 end
 
--- Janela Auto Steal Selector
 selectorFrame = Instance.new("Frame", screenGui)
 selectorFrame.Name = "AutoStealSelector"
 selectorFrame.Size = UDim2.new(0, 180, 0, 220)
@@ -757,7 +1014,6 @@ local function atualizarLista()
     end
 end
 
--- Janela Server Hop
 hopFrame = Instance.new("Frame", screenGui)
 hopFrame.Name = "ServerHopMenu"
 hopFrame.Size = UDim2.new(0, 180, 0, 260)
@@ -841,7 +1097,81 @@ Instance.new("UICorner", autoBtn).CornerRadius = UDim.new(0, 8)
 autoBtn.ZIndex = 11
 applyRotatingLED(Instance.new("UIStroke", autoBtn))
 
--- Botão Flutuante
+-- BOTÃO AUTO CLONE
+local autoCloneButton = Instance.new("TextButton", screenGui)
+autoCloneButton.Size = UDim2.new(0, 100, 0, 40)
+autoCloneButton.Position = UDim2.new(0.8, -40, 0.5, -190)
+autoCloneButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+autoCloneButton.Text = "Auto Clone"
+autoCloneButton.TextColor3 = Color3.fromRGB(255, 215, 0)
+autoCloneButton.Font = Enum.Font.GothamBold
+autoCloneButton.TextSize = 12
+autoCloneButton.ZIndex = 20
+
+local cloneCorner = Instance.new("UICorner", autoCloneButton)
+cloneCorner.CornerRadius = UDim.new(0, 10)
+
+local cloneStroke = Instance.new("UIStroke", autoCloneButton)
+cloneStroke.Thickness = 2
+cloneStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+cloneStroke.Color = Color3.fromRGB(255, 215, 0)
+
+local cloneLedGradient = Instance.new("UIGradient", cloneStroke)
+cloneLedGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(15, 15, 15)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 215, 0)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(15, 15, 15))
+})
+table.insert(rotatingGradients, cloneLedGradient)
+
+local cloneTextShine = Instance.new("UIGradient", autoCloneButton)
+cloneTextShine.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 215, 0)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 255, 255)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 215, 0))
+})
+cloneTextShine.Enabled = true
+table.insert(shineGradients, cloneTextShine)
+
+autoCloneButton.MouseButton1Click:Connect(function()
+    instantCloner()
+end)
+
+local function dragCloneButton()
+    local dragging, dragInput, dragStart, startPos
+    autoCloneButton.InputBegan:Connect(function(input)
+        if scriptRunning and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+            dragging = true
+            dragStart = input.Position
+            startPos = autoCloneButton.Position
+        end
+    end)
+    
+    autoCloneButton.InputChanged:Connect(function(input)
+        if scriptRunning and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            dragInput = input
+        end
+    end)
+    
+    RunService.RenderStepped:Connect(function()
+        if scriptRunning and dragging and dragInput then
+            local delta = dragInput.Position - dragStart
+            autoCloneButton.Position = UDim2.new(
+                startPos.X.Scale, startPos.X.Offset + delta.X,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+end
+
+dragCloneButton()
+
 local toggleBall = Instance.new("TextButton", screenGui)
 toggleBall.Size = UDim2.new(0, 45, 0, 45)
 toggleBall.Position = UDim2.new(0.8, 70, 0.5, -190)
@@ -863,7 +1193,6 @@ cloudIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 cloudIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
 cloudIcon.ZIndex = 21
 
--- Janela Principal
 local mainFrame = Instance.new("Frame", screenGui)
 mainFrame.Size = UDim2.new(0, 400, 0, 350)
 mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -936,9 +1265,7 @@ local stealBtn, stealCirc = createOption("Auto Steal", 140)
 local speedBtn, speedCirc = createOption("Speed Boost", 180)
 local ragBtn, ragCirc = createOption("Anti Ragdoll", 220)
 local hopBtn, hopCirc = createOption("Server Hop", 260)
--- Botão do TP to Best foi removido pois agora está sempre ligado
 
--- ====================== ANTI RAGDOLL ======================
 local antiRagdollMode = nil
 local ragdollConnections = {}
 local cachedCharData = {}
@@ -1047,7 +1374,6 @@ local function disableAntiRagdoll()
     return true
 end
 
--- Funções de Controle de Janela
 local function toggleMenu()
     if not scriptRunning or isAnimating then return end
     isAnimating = true
@@ -1097,7 +1423,6 @@ end)
 
 toggleBall.MouseButton1Click:Connect(toggleMenu)
 
--- Carregamento e Conexões
 local function loadSettings()
     if isfile and isfile(fileName) then
         local success, data = pcall(function() return HttpService:JSONDecode(readfile(fileName)) end)
@@ -1116,7 +1441,6 @@ local function loadSettings()
             handleToggle(hopBtn, hopCirc, serverHopEnabled)
             hopFrame.Visible = serverHopEnabled
             hopTextBox.Text = data.hopValue or ""
-            -- tpToBestEnabled agora é sempre true, não carrega do save
         end
     end
 end
@@ -1203,7 +1527,6 @@ autoBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Loop Principal (Heartbeat)
 RunService.Heartbeat:Connect(function()
     if not scriptRunning then return end
     local t = os.clock()
@@ -1255,7 +1578,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Loop de Detecção de Brainrot
 local currentBrainrotValue = 0
 local lastNotify = 0
 local lastNotifiedBrainrot = nil
@@ -1287,7 +1609,6 @@ task.spawn(function()
                 if brainrotId ~= lastNotifiedBrainrot then
                     notifyLabel.Text = "💰 " .. best.name .. " | " .. best.income
                     
-                    -- FORÇA a parada do Auto Mode e Server Hop (CORREÇÃO PARA CELULAR)
                     if autoModeEnabled or hopActive then
                         autoModeEnabled = false
                         hopActive = false
@@ -1320,7 +1641,6 @@ task.spawn(function()
     end
 end)
 
--- Input Events
 UserInputService.JumpRequest:Connect(function()
     if scriptRunning and infJumpEnabled then
         spaceHeld = true
@@ -1337,10 +1657,12 @@ UserInputService.InputBegan:Connect(function(i, g)
         if i.KeyCode == Enum.KeyCode.R then
             kickSelf()
         end
+        if i.KeyCode == Enum.KeyCode.V then
+            instantCloner()
+        end
     end
 end)
 
--- Loop de Atualização da Lista
 task.spawn(function()
     while scriptRunning do
         atualizarLista()
@@ -1348,7 +1670,6 @@ task.spawn(function()
     end
 end)
 
--- Inicialização Final
 drag(mainFrame)
 drag(toggleBall)
 drag(selectorFrame)
@@ -1357,10 +1678,9 @@ drag(hopFrame)
 loadSettings()
 loadBlacklist()
 createKickWidget()
+initAntiBeeDisco()
 
--- Execução automática do TP to Best (SEMPRE ATIVO)
 local function autoTpToBest()
-    -- tpToBestEnabled agora é sempre true
     if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
         player.CharacterAdded:Wait()
         task.wait(1)
@@ -1369,7 +1689,6 @@ local function autoTpToBest()
     teleportToBestBrainrot()
 end
 
--- Sempre executa o TP to Best
 task.spawn(autoTpToBest)
 
 player.CharacterAdded:Connect(function()
@@ -1419,4 +1738,7 @@ end)
 task.wait(1)
 toggleMenu()
 
-print("[SkyHub] Carregado com sucesso - TP to Best SEMPRE ATIVO!")
+print("[SkyHub] Carregado com sucesso!")
+print("[SkyHub] TP to Best SEMPRE ATIVO!")
+print("[SkyHub] Anti-Bee & Anti-Disco ATIVADO permanentemente!")
+print("[SkyHub] Auto Clone - Pressione V ou clique no botão!")
