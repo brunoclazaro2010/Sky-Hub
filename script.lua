@@ -14,7 +14,7 @@ local speedBoostEnabled = false
 local autoStealEnabled = false
 local antiRagdollEnabled = false
 local serverHopEnabled = false
-local tpToBestEnabled = false
+local tpToBestEnabled = true -- Agora sempre true
 local menuOpen = false
 local isMinimized = false
 local spaceHeld = false
@@ -28,6 +28,7 @@ local shineGradients = {}
 local rotatingGradients = {}
 local targetRotation = 0
 local espGui
+local brainrotDetectedFlag = false -- Nova flag para garantir que o celular pare
 
 -- Variável para armazenar o JobId atual
 local currentServerJobId = nil
@@ -119,7 +120,6 @@ local function saveSettings()
         autoSteal = autoStealEnabled,
         antiRagdoll = antiRagdollEnabled,
         serverHop = serverHopEnabled,
-        tpToBest = tpToBestEnabled,
         hopValue = (hopTextBox and hopTextBox.Text) or ""
     }
     writefile(fileName, HttpService:JSONEncode(config))
@@ -403,56 +403,63 @@ local function getHighestValue()
     return highest
 end
 
--- Server Hop
+-- Server Hop (MODIFICADO - comportamento do script simples)
 local function doServerHop()
     if not hopActive then return end
-    statusLabel.Text = "Status: Buscando servidor aleatório..."
+    
+    statusLabel.Text = "Status: Iniciando busca..."
+    
     local placeId = game.PlaceId
     local url = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Asc&limit=100"
-    local success, content = pcall(function() return game:HttpGet(url) end)
+    
+    local success, content = pcall(function()
+        return game:HttpGet(url)
+    end)
+    
     if not success or not content or not hopActive then
-        statusLabel.Text = "Status: Erro ou Parado" return
+        statusLabel.Text = "Status: Erro ou Parado"
+        return
     end
+    
     local decoded = HttpService:JSONDecode(content)
-    if decoded and decoded.data and #decoded.data > 0 then
-        local availableServers = {}
+    
+    if decoded and decoded.data then
         for _, server in ipairs(decoded.data) do
-            if server.playing < server.maxPlayers and server.id ~= game.JobId and not isBlacklisted(server.id) then
-                table.insert(availableServers, server)
+            if not hopActive then break end
+            
+            if server.playing < server.maxPlayers 
+            and server.id ~= game.JobId 
+            and not isBlacklisted(server.id) then
+                
+                addServerToBlacklist(server.id)
+                statusLabel.Text = "Status: Teleportando..."
+                currentServerJobId = server.id
+                saveJobIdToFile(currentServerJobId)
+                
+                pcall(function()
+                    if autoModeEnabled then
+                        writefile(folderName .. "/AutoMode.txt", "true")
+                    end
+                    TeleportService:TeleportToPlaceInstance(placeId, server.id, player)
+                end)
+                
+                task.wait(2)
             end
         end
-        if #availableServers > 0 then
-            for i = #availableServers, 2, -1 do
-                local j = math.random(i)
-                availableServers[i], availableServers[j] = availableServers[j], availableServers[i]
-            end
-            local selectedServer = nil
-            for _, server in ipairs(availableServers) do
-                if server.playing < server.maxPlayers and not isBlacklisted(server.id) then
-                    selectedServer = server break
-                end
-            end
-            if selectedServer then
-                addServerToBlacklist(selectedServer.id)
-                statusLabel.Text = "Status: Teleportando..."
-                currentServerJobId = selectedServer.id
-                saveJobIdToFile(currentServerJobId)
-                pcall(function()
-                    if autoModeEnabled then writefile(folderName .. "/AutoMode.txt", "true") end
-                    TeleportService:TeleportToPlaceInstance(placeId, selectedServer.id, player)
-                end)
+        
+        if hopActive then
+            statusLabel.Text = "Status: Nenhum serv. livre"
+            if autoModeEnabled and hopActive then
                 task.wait(2)
-            else
-                statusLabel.Text = "Status: Nenhum servidor livre encontrado"
-                if autoModeEnabled and hopActive then task.wait(2) doServerHop() end
+                doServerHop()
             end
-        else
-            statusLabel.Text = "Status: Nenhum servidor disponível"
-            if autoModeEnabled and hopActive then task.wait(2) doServerHop() end
         end
     else
         statusLabel.Text = "Status: Lista vazia (tentando novamente...)"
-        if autoModeEnabled and hopActive then task.wait(2) doServerHop() end
+        if autoModeEnabled and hopActive then
+            task.wait(2)
+            doServerHop()
+        end
     end
 end
 
@@ -929,7 +936,7 @@ local stealBtn, stealCirc = createOption("Auto Steal", 140)
 local speedBtn, speedCirc = createOption("Speed Boost", 180)
 local ragBtn, ragCirc = createOption("Anti Ragdoll", 220)
 local hopBtn, hopCirc = createOption("Server Hop", 260)
-local tpBtn, tpCirc = createOption("TP to Best", 300)
+-- Botão do TP to Best foi removido pois agora está sempre ligado
 
 -- ====================== ANTI RAGDOLL ======================
 local antiRagdollMode = nil
@@ -1109,8 +1116,7 @@ local function loadSettings()
             handleToggle(hopBtn, hopCirc, serverHopEnabled)
             hopFrame.Visible = serverHopEnabled
             hopTextBox.Text = data.hopValue or ""
-            tpToBestEnabled = data.tpToBest or false
-            handleToggle(tpBtn, tpCirc, tpToBestEnabled)
+            -- tpToBestEnabled agora é sempre true, não carrega do save
         end
     end
 end
@@ -1152,18 +1158,6 @@ hopBtn.MouseButton1Click:Connect(function()
     saveSettings()
 end)
 
-tpBtn.MouseButton1Click:Connect(function()
-    tpToBestEnabled = not tpToBestEnabled
-    handleToggle(tpBtn, tpCirc, tpToBestEnabled)
-    saveSettings()
-    if tpToBestEnabled and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-        task.spawn(function()
-            task.wait(1)
-            teleportToBestBrainrot()
-        end)
-    end
-end)
-
 hopTextBox:GetPropertyChangedSignal("Text"):Connect(function()
     hopTextBox.Text = hopTextBox.Text:gsub("%D+", "")
     saveSettings()
@@ -1171,6 +1165,7 @@ end)
 
 startBtn.MouseButton1Click:Connect(function()
     hopActive = true
+    brainrotDetectedFlag = false
     local target = tonumber(hopTextBox.Text)
     if not target then statusLabel.Text = "Status: Digite um valor!" return end
     statusLabel.Text = "Status: Verificando..."
@@ -1190,12 +1185,14 @@ end)
 
 stopBtn.MouseButton1Click:Connect(function()
     hopActive = false
+    brainrotDetectedFlag = false
     statusLabel.Text = "Status: Parado Imediatamente"
     statusLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
 end)
 
 autoBtn.MouseButton1Click:Connect(function()
     autoModeEnabled = not autoModeEnabled
+    brainrotDetectedFlag = false
     if autoModeEnabled then
         statusLabel.Text = "Auto: Ligado"
         hopActive = true
@@ -1290,10 +1287,13 @@ task.spawn(function()
                 if brainrotId ~= lastNotifiedBrainrot then
                     notifyLabel.Text = "💰 " .. best.name .. " | " .. best.income
                     
-                    if autoModeEnabled then 
-                        autoModeEnabled = false 
-                        hopActive = false 
-                        statusLabel.Text = "Auto: Brainrot detectado!" 
+                    -- FORÇA a parada do Auto Mode e Server Hop (CORREÇÃO PARA CELULAR)
+                    if autoModeEnabled or hopActive then
+                        autoModeEnabled = false
+                        hopActive = false
+                        brainrotDetectedFlag = true
+                        statusLabel.Text = "Auto: Brainrot detectado!"
+                        print("[SkyHub] Brainrot detectado! Auto Mode e Server Hop desativados.")
                     end
                     
                     notifySound:Play()
@@ -1358,9 +1358,9 @@ loadSettings()
 loadBlacklist()
 createKickWidget()
 
--- Execução automática do TP to Best
+-- Execução automática do TP to Best (SEMPRE ATIVO)
 local function autoTpToBest()
-    if not tpToBestEnabled then return end
+    -- tpToBestEnabled agora é sempre true
     if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
         player.CharacterAdded:Wait()
         task.wait(1)
@@ -1369,15 +1369,12 @@ local function autoTpToBest()
     teleportToBestBrainrot()
 end
 
-if tpToBestEnabled then
-    task.spawn(autoTpToBest)
-end
+-- Sempre executa o TP to Best
+task.spawn(autoTpToBest)
 
 player.CharacterAdded:Connect(function()
-    if tpToBestEnabled then
-        task.wait(2)
-        teleportToBestBrainrot()
-    end
+    task.wait(2)
+    teleportToBestBrainrot()
 end)
 
 task.spawn(function()
@@ -1389,7 +1386,7 @@ task.spawn(function()
             pcall(function() delfile(folderName .. "/AutoMode.txt") end)
             repeat task.wait() until player.Character
             task.wait(5)
-            if notifyLabel.Text ~= "" then
+            if brainrotDetectedFlag or notifyLabel.Text ~= "" then
                 autoModeEnabled = false
                 hopActive = false
                 statusLabel.Text = "Auto: Encontrado!"
@@ -1422,4 +1419,4 @@ end)
 task.wait(1)
 toggleMenu()
 
-print("[SkyHub] Carregado com sucesso - Anti Ragdoll + TP to Best com coordenadas fixas das 8 bases!")
+print("[SkyHub] Carregado com sucesso - TP to Best SEMPRE ATIVO!")
