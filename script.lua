@@ -17,7 +17,7 @@ local speedBoostEnabled = false
 local autoStealEnabled = false
 local antiRagdollEnabled = false
 local serverHopEnabled = false
-local tpToBestEnabled = true -- Agora sempre true
+local tpToBestEnabled = true
 local menuOpen = false
 local isMinimized = false
 local spaceHeld = false
@@ -185,109 +185,47 @@ local function instantCloner()
 end
 
 -- ============================================================
--- ANTI-BEE & ANTI-DISCO SYSTEM (SEMPRE ATIVO)
+-- ANTI-BEE & ANTI-DISCO SYSTEM (VERSÃO CORRIGIDA - SEM KICK)
 -- ============================================================
-
-local FOV_MANAGER = {
-    activeCount = 0,
-    conn = nil,
-    forcedFOV = 70,
-}
-
-function FOV_MANAGER:Start()
-    if self.conn then return end
-    
-    self.conn = RunService.RenderStepped:Connect(function()
-        local cam = workspace.CurrentCamera
-        if cam and cam.FieldOfView ~= self.forcedFOV then
-            cam.FieldOfView = self.forcedFOV
-        end
-    end)
-end
-
-function FOV_MANAGER:Stop()
-    if self.conn then
-        self.conn:Disconnect()
-        self.conn = nil
-    end
-end
-
-function FOV_MANAGER:Push()
-    self.activeCount = self.activeCount + 1
-    self:Start()
-end
-
-function FOV_MANAGER:Pop()
-    if self.activeCount > 0 then
-        self.activeCount = self.activeCount - 1
-    end
-    if self.activeCount == 0 then
-        self:Stop()
-    end
-end
 
 local antiBeeDiscoRunning = true
 local antiBeeDiscoConnections = {}
-local originalMoveFunction = nil
-local controlsProtected = false
 
-local BAD_LIGHTING_NAMES = {
-    Blue = true,
-    DiscoEffect = true,
-    BeeBlur = true,
-    ColorCorrection = true,
+-- Lista de objetos que são SEGUROS para remover (apenas efeitos visuais)
+local SAFE_TO_REMOVE = {
+    "Blue",
+    "DiscoEffect", 
+    "BeeBlur",
 }
 
+-- NÃO remove ColorCorrection e outros que podem causar kick
 local function antiBeeDiscoNuke(obj)
     if not obj or not obj.Parent then return end
-    if BAD_LIGHTING_NAMES[obj.Name] then
-        pcall(function()
-            obj:Destroy()
-        end)
+    -- Só remove se estiver na lista segura
+    for _, name in pairs(SAFE_TO_REMOVE) do
+        if obj.Name == name then
+            pcall(function()
+                obj:Destroy()
+                print("[Anti-Bee] Removido: " .. name)
+            end)
+            break
+        end
     end
 end
 
 local function antiBeeDiscoDisconnectAll()
     for _, conn in ipairs(antiBeeDiscoConnections) do
         if typeof(conn) == "RBXScriptConnection" then
-            conn:Disconnect()
+            pcall(function() conn:Disconnect() end)
         end
     end
     antiBeeDiscoConnections = {}
 end
 
+-- DESATIVADO para evitar kick (não mexe nos controles)
 local function protectControls()
-    if controlsProtected then return end
-    
-    pcall(function()
-        local PlayerScripts = player.PlayerScripts
-        local PlayerModule = PlayerScripts:FindFirstChild("PlayerModule")
-        if not PlayerModule then return end
-        
-        local Controls = require(PlayerModule):GetControls()
-        if not Controls then return end
-        
-        if not originalMoveFunction then
-            originalMoveFunction = Controls.moveFunction
-        end
-        
-        local function protectedMoveFunction(self, moveVector, relativeToCamera)
-            if originalMoveFunction then
-                originalMoveFunction(self, moveVector, relativeToCamera)
-            end
-        end
-        
-        local controlCheckConn = RunService.Heartbeat:Connect(function()
-            if not antiBeeDiscoRunning then return end
-            if Controls.moveFunction ~= protectedMoveFunction then
-                Controls.moveFunction = protectedMoveFunction
-            end
-        end)
-        
-        table.insert(antiBeeDiscoConnections, controlCheckConn)
-        Controls.moveFunction = protectedMoveFunction
-        controlsProtected = true
-    end)
+    -- Função desativada - não mexe nos controles para não causar detecção
+    return
 end
 
 local function blockBuzzingSound()
@@ -304,25 +242,26 @@ local function blockBuzzingSound()
     end)
 end
 
+-- DESATIVADO o FOV Manager (causava kick)
 local function initAntiBeeDisco()
+    -- Remove apenas objetos seguros
     for _, inst in ipairs(Lighting:GetDescendants()) do
         antiBeeDiscoNuke(inst)
     end
     
+    -- Monitora novos objetos (apenas leitura, sem destruir tudo)
     table.insert(antiBeeDiscoConnections, Lighting.DescendantAdded:Connect(function(obj)
         if not antiBeeDiscoRunning then return end
         antiBeeDiscoNuke(obj)
     end))
     
-    protectControls()
-    
+    -- Bloqueia som (seguro)
     table.insert(antiBeeDiscoConnections, RunService.Heartbeat:Connect(function()
         if not antiBeeDiscoRunning then return end
         blockBuzzingSound()
     end))
     
-    FOV_MANAGER:Push()
-    print("[SkyHub] Anti-Bee & Anti-Disco ativado permanentemente")
+    print("[SkyHub] Anti-Bee & Anti-Disco ativado (modo seguro - sem FOV/Controles)")
 end
 
 -- ============================================================
@@ -438,6 +377,8 @@ local function isBlacklisted(id)
     return false
 end
 
+-- ========== INTERFACE (mantida igual, sem alterações) ==========
+
 local oldGui = playerGui:FindFirstChild("DarkGeminiMenu")
 if oldGui then oldGui:Destroy() end
 
@@ -461,6 +402,7 @@ notifyLabel.TextSize = 16
 notifyLabel.Text = ""
 Instance.new("UIStroke", notifyLabel).Color = Color3.fromRGB(255, 215, 0)
 
+-- ========== KICK SYSTEM ==========
 local kickFrame = nil
 local kickEnabled = false
 
@@ -604,6 +546,8 @@ local function createKickWidget()
     end)
 end
 
+-- ========== FUNÇÕES DE UTILIDADE ==========
+
 local function parseValue(text)
     text = text:lower()
     local num = tonumber(text:match("[%d%.]+"))
@@ -620,6 +564,8 @@ local function formatValue(n)
     elseif n >= 1000 then return string.format("%.1fk", n/1000)
     else return tostring(n) end
 end
+
+-- ========== DETECÇÃO DE BRAINROT ==========
 
 local function getBestBrainrot()
     local highest = 0
@@ -683,6 +629,8 @@ local function getHighestValue()
     return highest
 end
 
+-- ========== SERVER HOP ==========
+
 local function doServerHop()
     if not hopActive then return end
     
@@ -741,6 +689,8 @@ local function doServerHop()
         end
     end
 end
+
+-- ========== TP TO BEST ==========
 
 local function getHRP()
     local char = player.Character
@@ -834,6 +784,8 @@ end
 
 _G.teleportToBestBrainrot = teleportToBestBrainrot
 
+-- ========== EFEITOS VISUAIS ==========
+
 local function applyShine(target)
     local grad = Instance.new("UIGradient", target)
     grad.Color = ColorSequence.new({
@@ -891,6 +843,8 @@ local function createBrainrotESP(data)
     return billboard
 end
 
+-- ========== HELPERS DE INTERFACE ==========
+
 local function handleToggle(btn, circle, state)
     TweenService:Create(btn, TweenInfo.new(0.2), { BackgroundColor3 = state and Color3.fromRGB(255, 215, 0) or Color3.fromRGB(50, 50, 50) }):Play()
     TweenService:Create(circle, TweenInfo.new(0.2), { Position = state and UDim2.new(1, -23, 0.5, -10) or UDim2.new(0, 3, 0.5, -10) }):Play()
@@ -926,6 +880,9 @@ local function drag(o)
     end)
 end
 
+-- ========== INTERFACE COMPLETA ==========
+
+-- Auto Steal Selector
 selectorFrame = Instance.new("Frame", screenGui)
 selectorFrame.Name = "AutoStealSelector"
 selectorFrame.Size = UDim2.new(0, 180, 0, 220)
@@ -1014,6 +971,7 @@ local function atualizarLista()
     end
 end
 
+-- Server Hop Menu
 hopFrame = Instance.new("Frame", screenGui)
 hopFrame.Name = "ServerHopMenu"
 hopFrame.Size = UDim2.new(0, 180, 0, 260)
@@ -1172,6 +1130,7 @@ end
 
 dragCloneButton()
 
+-- Botão Flutuante
 local toggleBall = Instance.new("TextButton", screenGui)
 toggleBall.Size = UDim2.new(0, 45, 0, 45)
 toggleBall.Position = UDim2.new(0.8, 70, 0.5, -190)
@@ -1193,6 +1152,7 @@ cloudIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 cloudIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
 cloudIcon.ZIndex = 21
 
+-- Janela Principal
 local mainFrame = Instance.new("Frame", screenGui)
 mainFrame.Size = UDim2.new(0, 400, 0, 350)
 mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -1265,6 +1225,8 @@ local stealBtn, stealCirc = createOption("Auto Steal", 140)
 local speedBtn, speedCirc = createOption("Speed Boost", 180)
 local ragBtn, ragCirc = createOption("Anti Ragdoll", 220)
 local hopBtn, hopCirc = createOption("Server Hop", 260)
+
+-- ========== ANTI RAGDOLL ==========
 
 local antiRagdollMode = nil
 local ragdollConnections = {}
@@ -1374,6 +1336,8 @@ local function disableAntiRagdoll()
     return true
 end
 
+-- ========== CONTROLES DE MENU ==========
+
 local function toggleMenu()
     if not scriptRunning or isAnimating then return end
     isAnimating = true
@@ -1423,6 +1387,8 @@ end)
 
 toggleBall.MouseButton1Click:Connect(toggleMenu)
 
+-- ========== CARREGAMENTO DE CONFIGURAÇÕES ==========
+
 local function loadSettings()
     if isfile and isfile(fileName) then
         local success, data = pcall(function() return HttpService:JSONDecode(readfile(fileName)) end)
@@ -1444,6 +1410,8 @@ local function loadSettings()
         end
     end
 end
+
+-- ========== EVENTOS DOS BOTÕES ==========
 
 infBtn.MouseButton1Click:Connect(function()
     infJumpEnabled = not infJumpEnabled
@@ -1527,6 +1495,8 @@ autoBtn.MouseButton1Click:Connect(function()
     end
 end)
 
+-- ========== LOOP PRINCIPAL ==========
+
 RunService.Heartbeat:Connect(function()
     if not scriptRunning then return end
     local t = os.clock()
@@ -1577,6 +1547,8 @@ RunService.Heartbeat:Connect(function()
         end
     end
 end)
+
+-- ========== LOOP DE DETECÇÃO DE BRAINROT ==========
 
 local currentBrainrotValue = 0
 local lastNotify = 0
@@ -1641,6 +1613,8 @@ task.spawn(function()
     end
 end)
 
+-- ========== INPUT EVENTS ==========
+
 UserInputService.JumpRequest:Connect(function()
     if scriptRunning and infJumpEnabled then
         spaceHeld = true
@@ -1663,12 +1637,16 @@ UserInputService.InputBegan:Connect(function(i, g)
     end
 end)
 
+-- ========== LOOP DE ATUALIZAÇÃO ==========
+
 task.spawn(function()
     while scriptRunning do
         atualizarLista()
         task.wait(3)
     end
 end)
+
+-- ========== INICIALIZAÇÃO FINAL ==========
 
 drag(mainFrame)
 drag(toggleBall)
@@ -1680,6 +1658,7 @@ loadBlacklist()
 createKickWidget()
 initAntiBeeDisco()
 
+-- Execução automática do TP to Best
 local function autoTpToBest()
     if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
         player.CharacterAdded:Wait()
@@ -1696,6 +1675,7 @@ player.CharacterAdded:Connect(function()
     teleportToBestBrainrot()
 end)
 
+-- Recuperação do modo automático
 task.spawn(function()
     if isfile and isfile(folderName .. "/AutoMode.txt") then
         local data = readfile(folderName .. "/AutoMode.txt")
@@ -1718,6 +1698,7 @@ task.spawn(function()
     end
 end)
 
+-- Limpeza de UI do CoreGui
 task.spawn(function()
     while scriptRunning do
         pcall(function()
@@ -1740,5 +1721,5 @@ toggleMenu()
 
 print("[SkyHub] Carregado com sucesso!")
 print("[SkyHub] TP to Best SEMPRE ATIVO!")
-print("[SkyHub] Anti-Bee & Anti-Disco ATIVADO permanentemente!")
+print("[SkyHub] Anti-Bee & Anti-Disco ATIVADO (MODO SEGURO - SEM KICK)!")
 print("[SkyHub] Auto Clone - Pressione V ou clique no botão!")
