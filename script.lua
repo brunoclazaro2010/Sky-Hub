@@ -29,7 +29,7 @@ local shineGradients = {}
 local rotatingGradients = {}
 local targetRotation = 0
 local espGui
-local brainrotDetectedFlag = false -- Nova flag para garantir que o celular pare
+local brainrotDetectedFlag = false
 
 -- ============================================================
 -- ANTI-BEE & ANTI-DISCO SYSTEM (SEMPRE ATIVO)
@@ -43,7 +43,6 @@ local FOV_MANAGER = {
 
 function FOV_MANAGER:Start()
     if self.conn then return end
-    
     self.conn = RunService.RenderStepped:Connect(function()
         local cam = workspace.CurrentCamera
         if cam and cam.FieldOfView ~= self.forcedFOV then
@@ -73,7 +72,7 @@ function FOV_MANAGER:Pop()
     end
 end
 
-local antiBeeDiscoRunning = true -- SEMPRE ATIVO
+local antiBeeDiscoRunning = true
 local antiBeeDiscoConnections = {}
 local originalMoveFunction = nil
 local controlsProtected = false
@@ -88,9 +87,7 @@ local BAD_LIGHTING_NAMES = {
 local function antiBeeDiscoNuke(obj)
     if not obj or not obj.Parent then return end
     if BAD_LIGHTING_NAMES[obj.Name] then
-        pcall(function()
-            obj:Destroy()
-        end)
+        pcall(function() obj:Destroy() end)
     end
 end
 
@@ -103,67 +100,47 @@ local function antiBeeDiscoDisconnectAll()
     antiBeeDiscoConnections = {}
 end
 
--- Protect player controls from inversion
 local function protectControls()
     if controlsProtected then return end
-    
     pcall(function()
         local PlayerScripts = player.PlayerScripts
         local PlayerModule = PlayerScripts:FindFirstChild("PlayerModule")
         if not PlayerModule then return end
-        
         local Controls = require(PlayerModule):GetControls()
         if not Controls then return end
-        
-        -- Store original move function
         if not originalMoveFunction then
             originalMoveFunction = Controls.moveFunction
         end
-        
-        -- Create protected wrapper that prevents control inversion
         local function protectedMoveFunction(self, moveVector, relativeToCamera)
-            -- Call original function with original parameters (no negation)
             if originalMoveFunction then
                 originalMoveFunction(self, moveVector, relativeToCamera)
             end
         end
-        
-        -- Monitor for control hijacking
         local controlCheckConn = RunService.Heartbeat:Connect(function()
             if not antiBeeDiscoRunning then return end
-            
-            -- Restore controls if they've been modified
             if Controls.moveFunction ~= protectedMoveFunction then
                 Controls.moveFunction = protectedMoveFunction
             end
         end)
-        
         table.insert(antiBeeDiscoConnections, controlCheckConn)
-        
-        -- Set protected function
         Controls.moveFunction = protectedMoveFunction
         controlsProtected = true
     end)
 end
 
--- Restore original controls (mantido para compatibilidade, mas não usado pois nunca desativa)
 local function restoreControls()
     if not controlsProtected then return end
-    
     pcall(function()
         local PlayerScripts = player.PlayerScripts
         local PlayerModule = PlayerScripts:FindFirstChild("PlayerModule")
         if not PlayerModule then return end
-        
         local Controls = require(PlayerModule):GetControls()
         if not Controls or not originalMoveFunction then return end
-        
         Controls.moveFunction = originalMoveFunction
         controlsProtected = false
     end)
 end
 
--- Block buzzing sound
 local function blockBuzzingSound()
     pcall(function()
         local PlayerScripts = player.PlayerScripts
@@ -178,52 +155,38 @@ local function blockBuzzingSound()
     end)
 end
 
--- Inicializa o Anti-Bee & Anti-Disco (sempre ativo)
 local function initAntiBeeDisco()
-    -- Nuke existing bad effects
     for _, inst in ipairs(Lighting:GetDescendants()) do
         antiBeeDiscoNuke(inst)
     end
-    
-    -- Monitor for new effects
     table.insert(antiBeeDiscoConnections, Lighting.DescendantAdded:Connect(function(obj)
         if not antiBeeDiscoRunning then return end
         antiBeeDiscoNuke(obj)
     end))
-    
-    -- Protect controls from inversion
     protectControls()
-    
-    -- Block buzzing sound
     table.insert(antiBeeDiscoConnections, RunService.Heartbeat:Connect(function()
         if not antiBeeDiscoRunning then return end
         blockBuzzingSound()
     end))
-    
     FOV_MANAGER:Push()
-    
     print("[SkyHub] Anti-Bee & Anti-Disco ativado permanentemente")
 end
 
 -- ============================================================
 
--- Variável para armazenar o JobId atual
 local currentServerJobId = nil
 
--- ===== COORDENADAS DAS ZONAS DE COLETA (preenchidas) =====
 local basesColeta = {
-    Vector3.new(-477.76, 12.96, 222.40),  -- Base 1
-    Vector3.new(-477.99, 12.96, 113.67),  -- Base 2
-    Vector3.new(-477.77, 12.90, 6.08),    -- Base 3
-    Vector3.new(-477.86, 12.96, -100.56), -- Base 4
-    Vector3.new(-341.44, 12.96, -101.09), -- Base 5
-    Vector3.new(-341.43, 12.96, 5.70),    -- Base 6
-    Vector3.new(-341.42, 12.96, 113.54),  -- Base 7
-    Vector3.new(-341.21, 12.96, 221.10),  -- Base 8
+    Vector3.new(-477.76, 12.96, 222.40),
+    Vector3.new(-477.99, 12.96, 113.67),
+    Vector3.new(-477.77, 12.90, 6.08),
+    Vector3.new(-477.86, 12.96, -100.56),
+    Vector3.new(-341.44, 12.96, -101.09),
+    Vector3.new(-341.43, 12.96, 5.70),
+    Vector3.new(-341.42, 12.96, 113.54),
+    Vector3.new(-341.21, 12.96, 221.10),
 }
--- ========================================================
 
--- // Sistema de Arquivos e Configurações
 local folderName = "SkyHub"
 local fileName = folderName .. "/Config.json"
 local jobIdFile = folderName .. "/CurrentJobId.txt"
@@ -249,7 +212,6 @@ local function loadJobIdFromFile()
     return nil
 end
 
--- ==================== DISCORD WEBHOOK ====================
 local discordWebhookEnabled = true
 local webhookUrl = "https://discord.com/api/webhooks/1492197458950754527/JXmigrKS6vN7BYD-72Hb6ZlT6DBa8q5vLgBy4u0qMMCEdPUFpbn1CSh0meDEFYdeiuXb"
 
@@ -302,7 +264,6 @@ local function saveSettings()
     writefile(fileName, HttpService:JSONEncode(config))
 end
 
--- Blacklist
 local blacklistFile = folderName .. "/ServerBlacklist.json"
 local serverBlacklist = {}
 
@@ -331,7 +292,6 @@ local function isBlacklisted(id)
     return false
 end
 
--- Interface Base
 local oldGui = playerGui:FindFirstChild("DarkGeminiMenu")
 if oldGui then oldGui:Destroy() end
 
@@ -355,7 +315,6 @@ notifyLabel.TextSize = 16
 notifyLabel.Text = ""
 Instance.new("UIStroke", notifyLabel).Color = Color3.fromRGB(255, 215, 0)
 
--- ==================== SISTEMA DE KICK ====================
 local kickFrame = nil
 local kickEnabled = false
 
@@ -365,7 +324,6 @@ end
 
 local function createKickWidget()
     if kickFrame then return end
-    
     kickFrame = Instance.new("Frame", screenGui)
     kickFrame.Name = "KickFrame"
     kickFrame.Size = UDim2.new(0, 200, 0, 50)
@@ -374,16 +332,13 @@ local function createKickWidget()
     kickFrame.BackgroundTransparency = 0
     kickFrame.Visible = true
     kickFrame.ZIndex = 100
-    
     local corner = Instance.new("UICorner", kickFrame)
     corner.CornerRadius = UDim.new(0, 12)
-    
     local kickStroke = Instance.new("UIStroke", kickFrame)
     kickStroke.Thickness = 2
     kickStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     kickStroke.Color = Color3.fromRGB(255, 255, 255)
     kickStroke.ZIndex = 101
-    
     local ledGradient = Instance.new("UIGradient", kickStroke)
     ledGradient.Color = ColorSequence.new({
         ColorSequenceKeypoint.new(0, Color3.fromRGB(15, 15, 15)),
@@ -391,7 +346,6 @@ local function createKickWidget()
         ColorSequenceKeypoint.new(1, Color3.fromRGB(15, 15, 15))
     })
     table.insert(rotatingGradients, ledGradient)
-    
     local kickText = Instance.new("TextLabel", kickFrame)
     kickText.Size = UDim2.new(0, 50, 1, 0)
     kickText.Position = UDim2.new(0, 10, 0, 0)
@@ -403,38 +357,31 @@ local function createKickWidget()
     kickText.TextXAlignment = Enum.TextXAlignment.Left
     kickText.TextYAlignment = Enum.TextYAlignment.Center
     kickText.ZIndex = 102
-    
     local toggleContainer = Instance.new("Frame", kickFrame)
     toggleContainer.Size = UDim2.new(0, 60, 0, 30)
     toggleContainer.Position = UDim2.new(0, 60, 0.5, -15)
     toggleContainer.BackgroundTransparency = 1
     toggleContainer.ZIndex = 102
-    
     local toggleBg = Instance.new("Frame", toggleContainer)
     toggleBg.Size = UDim2.new(1, 0, 1, 0)
     toggleBg.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     toggleBg.BorderSizePixel = 0
     toggleBg.ZIndex = 102
-    
     local toggleCorner = Instance.new("UICorner", toggleBg)
     toggleCorner.CornerRadius = UDim.new(1, 0)
-    
     local toggleCircle = Instance.new("Frame", toggleBg)
     toggleCircle.Size = UDim2.new(0, 24, 0, 24)
     toggleCircle.Position = UDim2.new(0, 3, 0.5, -12)
     toggleCircle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     toggleCircle.BorderSizePixel = 0
     toggleCircle.ZIndex = 103
-    
     local toggleCircleCorner = Instance.new("UICorner", toggleCircle)
     toggleCircleCorner.CornerRadius = UDim.new(1, 0)
-    
     local toggleButton = Instance.new("TextButton", toggleContainer)
     toggleButton.Size = UDim2.new(1, 0, 1, 0)
     toggleButton.BackgroundTransparency = 1
     toggleButton.Text = ""
     toggleButton.ZIndex = 102
-    
     local keybindLabel = Instance.new("TextLabel", kickFrame)
     keybindLabel.Size = UDim2.new(0, 80, 1, 0)
     keybindLabel.Position = UDim2.new(1, -85, 0, 0)
@@ -446,7 +393,6 @@ local function createKickWidget()
     keybindLabel.TextXAlignment = Enum.TextXAlignment.Right
     keybindLabel.TextYAlignment = Enum.TextYAlignment.Center
     keybindLabel.ZIndex = 102
-    
     local function updateToggleVisual()
         if kickEnabled then
             toggleBg.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
@@ -456,7 +402,6 @@ local function createKickWidget()
             toggleCircle.Position = UDim2.new(0, 3, 0.5, -12)
         end
     end
-    
     toggleButton.MouseButton1Click:Connect(function()
         kickEnabled = not kickEnabled
         updateToggleVisual()
@@ -464,9 +409,7 @@ local function createKickWidget()
             kickSelf()
         end
     end)
-    
     updateToggleVisual()
-    
     local dragging, dragInput, dragStart, startPos
     kickFrame.InputBegan:Connect(function(input)
         if scriptRunning and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
@@ -475,13 +418,11 @@ local function createKickWidget()
             startPos = kickFrame.Position
         end
     end)
-    
     kickFrame.InputChanged:Connect(function(input)
         if scriptRunning and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             dragInput = input
         end
     end)
-    
     RunService.RenderStepped:Connect(function()
         if scriptRunning and dragging and dragInput then
             local delta = dragInput.Position - dragStart
@@ -491,7 +432,6 @@ local function createKickWidget()
             )
         end
     end)
-    
     UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = false
@@ -499,7 +439,6 @@ local function createKickWidget()
     end)
 end
 
--- Funções de cálculo
 local function parseValue(text)
     text = text:lower()
     local num = tonumber(text:match("[%d%.]+"))
@@ -517,7 +456,6 @@ local function formatValue(n)
     else return tostring(n) end
 end
 
--- ===== DETECÇÃO DE BRAINROT (retorna BasePart) =====
 local function getBestBrainrot()
     local highest = 0
     local bestData = nil
@@ -580,50 +518,34 @@ local function getHighestValue()
     return highest
 end
 
--- Server Hop (MODIFICADO - comportamento do script simples)
 local function doServerHop()
     if not hopActive then return end
-    
     statusLabel.Text = "Status: Iniciando busca..."
-    
     local placeId = game.PlaceId
     local url = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Asc&limit=100"
-    
-    local success, content = pcall(function()
-        return game:HttpGet(url)
-    end)
-    
+    local success, content = pcall(function() return game:HttpGet(url) end)
     if not success or not content or not hopActive then
         statusLabel.Text = "Status: Erro ou Parado"
         return
     end
-    
     local decoded = HttpService:JSONDecode(content)
-    
     if decoded and decoded.data then
         for _, server in ipairs(decoded.data) do
             if not hopActive then break end
-            
-            if server.playing < server.maxPlayers 
-            and server.id ~= game.JobId 
-            and not isBlacklisted(server.id) then
-                
+            if server.playing < server.maxPlayers and server.id ~= game.JobId and not isBlacklisted(server.id) then
                 addServerToBlacklist(server.id)
                 statusLabel.Text = "Status: Teleportando..."
                 currentServerJobId = server.id
                 saveJobIdToFile(currentServerJobId)
-                
                 pcall(function()
                     if autoModeEnabled then
                         writefile(folderName .. "/AutoMode.txt", "true")
                     end
                     TeleportService:TeleportToPlaceInstance(placeId, server.id, player)
                 end)
-                
                 task.wait(2)
             end
         end
-        
         if hopActive then
             statusLabel.Text = "Status: Nenhum serv. livre"
             if autoModeEnabled and hopActive then
@@ -640,7 +562,6 @@ local function doServerHop()
     end
 end
 
--- ===== FUNÇÕES AUXILIARES DO TP TO BEST =====
 local function getHRP()
     local char = player.Character
     if not char then return nil end
@@ -660,13 +581,11 @@ local function getPlotFromPart(part)
     return nil
 end
 
--- ===== FUNÇÃO PRINCIPAL DE TELEPORTE (usa coordenada fixa da base mais próxima) =====
 local function teleportToPosition(targetPart, plot)
     if not targetPart or not targetPart:IsA("BasePart") then
         print("[Teleporte] Erro: targetPart não é uma BasePart válida.")
         return false
     end
-
     local character = player.Character
     if not character or not character:FindFirstChild("HumanoidRootPart") then
         print("[Teleporte] Personagem não encontrado")
@@ -675,15 +594,9 @@ local function teleportToPosition(targetPart, plot)
     local humanoid = character:FindFirstChild("Humanoid")
     local hrp = character.HumanoidRootPart
     if not humanoid or not hrp then return false end
-
-    -- Equipa o tapete se disponível
     local carpet = player.Backpack:FindFirstChild("Flying Carpet")
     if carpet then humanoid:EquipTool(carpet) end
-
-    -- Obtém a posição do plot (centro da base onde o brainrot está)
     local plotPos = plot and plot:GetPivot().Position or targetPart.Position
-
-    -- Encontra a base mais próxima do brainrot usando as coordenadas da tabela
     local closestBasePos = nil
     local closestDist = math.huge
     for _, basePos in pairs(basesColeta) do
@@ -693,23 +606,30 @@ local function teleportToPosition(targetPart, plot)
             closestBasePos = basePos
         end
     end
-
     if not closestBasePos then
         print("[Teleporte] Nenhuma base configurada! Usando posição do plot + offset.")
         local forward = plot and plot:GetPivot().LookVector or Vector3.new(0, 0, 1)
         closestBasePos = plotPos + forward * 8
     end
-
-    -- Ajusta a altura para o chão (raycast)
+    
+    -- DETERMINA A DIREÇÃO DO OFFSET BASEADO NA POSIÇÃO DA BASE
+    local forwardOffset = 0
+    if closestBasePos.X < -400 then
+        -- Bases 1-4: vai olhar para OESTE, então desloca para OESTE
+        forwardOffset = -0.8 -- 0.8 studs para OESTE
+    else
+        -- Bases 5-8: vai olhar para LESTE, então desloca para LESTE
+        forwardOffset = 0.8 -- 0.8 studs para LESTE
+    end
+    
     local rayOrigin = closestBasePos + Vector3.new(0, 50, 0)
     local rayParams = RaycastParams.new()
     rayParams.FilterDescendantsInstances = { workspace:FindFirstChild("Map") }
     rayParams.FilterType = Enum.RaycastFilterType.Whitelist
     local result = workspace:Raycast(rayOrigin, Vector3.new(0, -100, 0), rayParams)
     local groundY = result and result.Position.Y or (closestBasePos.Y - 5)
-    local finalPos = Vector3.new(closestBasePos.X, groundY + 3, closestBasePos.Z)
-
-    -- Pequeno pulo para evitar colisão
+    -- ADICIONA O OFFSET PARA FRENTE NA POSIÇÃO FINAL
+    local finalPos = Vector3.new(closestBasePos.X + forwardOffset, groundY + 3, closestBasePos.Z)
     local state = humanoid:GetState()
     if state ~= Enum.HumanoidStateType.Jumping and state ~= Enum.HumanoidStateType.Freefall then
         humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
@@ -717,30 +637,66 @@ local function teleportToPosition(targetPart, plot)
     end
     hrp.Velocity = Vector3.new(hrp.Velocity.X, 200, hrp.Velocity.Z)
     task.wait(0.1)
-
-    -- Teleporta para a coordenada da Zona de Coleta, virado para o centro da base
     local lookPos = plot and plot:GetPivot().Position or targetPart.Position
     hrp.CFrame = CFrame.new(finalPos, lookPos)
-
-    print(string.format("[Teleporte] Teleportado para Zona de Coleta da base mais próxima em %s", tostring(finalPos)))
-    return true
+    print(string.format("[Teleporte] Teleportado para Zona de Coleta da base mais próxima em %s (offset: %.1f)", tostring(finalPos), forwardOffset))
+    return true, plot, lookPos, closestBasePos
 end
 
--- Função principal de teleporte (exportada)
+-- CORREÇÃO: Alinha personagem e câmera para ficarem de frente para a base
+-- Bases 1-4 (X=-477): olhar para OESTE (X-)
+-- Bases 5-8 (X=-341): olhar para LESTE (X+)
+local function alignToBase(usedBasePos)
+    task.wait(0.2) -- Aguarda o teleporte estabilizar
+    
+    local character = player.Character
+    if not character then return end
+    
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    
+    local camera = workspace.CurrentCamera
+    if not camera then return end
+    
+    local lookDirection
+    if usedBasePos.X < -400 then
+        -- Bases 1-4 (lado oeste): olhar para OESTE (X diminuindo)
+        lookDirection = Vector3.new(-1, 0, 0)
+        print("[Teleporte] Base do lado OESTE (1-4) - personagem e câmera virados para OESTE")
+    else
+        -- Bases 5-8 (lado leste): olhar para LESTE (X aumentando)
+        lookDirection = Vector3.new(1, 0, 0)
+        print("[Teleporte] Base do lado LESTE (5-8) - personagem e câmera virados para LESTE")
+    end
+    
+    -- Calcula o ponto para onde olhar
+    local lookAtPoint = hrp.Position + lookDirection
+    
+    -- Aplica a rotação no personagem
+    hrp.CFrame = CFrame.new(hrp.Position, lookAtPoint)
+    
+    -- Também alinha a câmera para olhar na mesma direção
+    local cameraCFrame = CFrame.new(camera.CFrame.Position, hrp.Position + lookDirection)
+    camera.CFrame = cameraCFrame
+    
+    print("[Teleporte] Personagem e câmera alinhados de frente para a base!")
+end
+
 local function teleportToBestBrainrot()
     local best = getBestBrainrot()
     if not best or not best.part then
         print("[Teleporte] Nenhum brainrot encontrado no servidor.")
         return false
     end
-
     local plot = getPlotFromPart(best.part)
     print(string.format("[Teleporte] Melhor brainrot: %s (%s) - Plot: %s", 
         best.name or "?", best.income, plot and plot.Name or "desconhecido"))
-
-    local success = teleportToPosition(best.part, plot)
-    if success then
+    
+    local success, plotResult, lookPos, usedBase = teleportToPosition(best.part, plot)
+    
+    if success and usedBase then
         print("[Teleporte] Teleportado com sucesso para a Zona de Coleta!")
+        alignToBase(usedBase)
     else
         print("[Teleporte] Falha ao teleportar.")
     end
@@ -749,9 +705,6 @@ end
 
 _G.teleportToBestBrainrot = teleportToBestBrainrot
 
--- ===== FIM DAS FUNÇÕES TP TO BEST =====
-
--- Efeitos Visuais (mantido igual)
 local function applyShine(target)
     local grad = Instance.new("UIGradient", target)
     grad.Color = ColorSequence.new({
@@ -809,7 +762,6 @@ local function createBrainrotESP(data)
     return billboard
 end
 
--- Helpers da Interface
 local function handleToggle(btn, circle, state)
     TweenService:Create(btn, TweenInfo.new(0.2), { BackgroundColor3 = state and Color3.fromRGB(255, 215, 0) or Color3.fromRGB(50, 50, 50) }):Play()
     TweenService:Create(circle, TweenInfo.new(0.2), { Position = state and UDim2.new(1, -23, 0.5, -10) or UDim2.new(0, 3, 0.5, -10) }):Play()
@@ -845,7 +797,6 @@ local function drag(o)
     end)
 end
 
--- Janela Auto Steal Selector
 selectorFrame = Instance.new("Frame", screenGui)
 selectorFrame.Name = "AutoStealSelector"
 selectorFrame.Size = UDim2.new(0, 180, 0, 220)
@@ -934,7 +885,6 @@ local function atualizarLista()
     end
 end
 
--- Janela Server Hop
 hopFrame = Instance.new("Frame", screenGui)
 hopFrame.Name = "ServerHopMenu"
 hopFrame.Size = UDim2.new(0, 180, 0, 260)
@@ -1018,7 +968,49 @@ Instance.new("UICorner", autoBtn).CornerRadius = UDim.new(0, 8)
 autoBtn.ZIndex = 11
 applyRotatingLED(Instance.new("UIStroke", autoBtn))
 
--- Botão Flutuante
+-- ============================================================
+-- BOTÃO TP TO BEST (LADO ESQUERDO DA BOLINHA NUVEM)
+-- ============================================================
+
+local tpButton = Instance.new("TextButton", screenGui)
+tpButton.Size = UDim2.new(0, 100, 0, 45)
+tpButton.Position = UDim2.new(0.8, -40, 0.5, -190) -- Lado esquerdo da bolinha
+tpButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+tpButton.Text = ""
+Instance.new("UICorner", tpButton).CornerRadius = UDim.new(0, 12)
+tpButton.ZIndex = 20
+
+-- Borda LED dourada
+local tpStroke = Instance.new("UIStroke", tpButton)
+tpStroke.Thickness = 3
+tpStroke.Color = Color3.fromRGB(255, 255, 255)
+applyRotatingLED(tpStroke)
+
+-- Texto do botão
+local tpText = Instance.new("TextLabel", tpButton)
+tpText.Size = UDim2.new(1, 0, 1, 0)
+tpText.BackgroundTransparency = 1
+tpText.Text = "TP to Best\n(T)"
+tpText.TextSize = 12
+tpText.TextColor3 = Color3.fromRGB(255, 215, 0)
+tpText.Font = Enum.Font.GothamBold
+tpText.TextWrapped = true
+tpText.ZIndex = 21
+
+-- Tornar o botão arrastável também
+drag(tpButton)
+
+-- Clique do botão
+tpButton.MouseButton1Click:Connect(function()
+    if not scriptRunning then return end
+    print("[SkyHub] Botão TP to Best clicado!")
+    task.spawn(function()
+        teleportToBestBrainrot()
+    end)
+end)
+
+-- ============================================================
+
 local toggleBall = Instance.new("TextButton", screenGui)
 toggleBall.Size = UDim2.new(0, 45, 0, 45)
 toggleBall.Position = UDim2.new(0.8, 70, 0.5, -190)
@@ -1040,7 +1032,6 @@ cloudIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 cloudIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
 cloudIcon.ZIndex = 21
 
--- Janela Principal
 local mainFrame = Instance.new("Frame", screenGui)
 mainFrame.Size = UDim2.new(0, 400, 0, 350)
 mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -1113,7 +1104,6 @@ local stealBtn, stealCirc = createOption("Auto Steal", 140)
 local speedBtn, speedCirc = createOption("Speed Boost", 180)
 local ragBtn, ragCirc = createOption("Anti Ragdoll", 220)
 local hopBtn, hopCirc = createOption("Server Hop", 260)
--- Botão do TP to Best foi removido pois agora está sempre ligado
 
 -- ====================== ANTI RAGDOLL ======================
 local antiRagdollMode = nil
@@ -1224,7 +1214,6 @@ local function disableAntiRagdoll()
     return true
 end
 
--- Funções de Controle de Janela
 local function toggleMenu()
     if not scriptRunning or isAnimating then return end
     isAnimating = true
@@ -1274,7 +1263,6 @@ end)
 
 toggleBall.MouseButton1Click:Connect(toggleMenu)
 
--- Carregamento e Conexões
 local function loadSettings()
     if isfile and isfile(fileName) then
         local success, data = pcall(function() return HttpService:JSONDecode(readfile(fileName)) end)
@@ -1293,7 +1281,6 @@ local function loadSettings()
             handleToggle(hopBtn, hopCirc, serverHopEnabled)
             hopFrame.Visible = serverHopEnabled
             hopTextBox.Text = data.hopValue or ""
-            -- tpToBestEnabled agora é sempre true, não carrega do save
         end
     end
 end
@@ -1380,7 +1367,6 @@ autoBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Loop Principal (Heartbeat)
 RunService.Heartbeat:Connect(function()
     if not scriptRunning then return end
     local t = os.clock()
@@ -1412,7 +1398,7 @@ RunService.Heartbeat:Connect(function()
 
         if infJumpEnabled and spaceHeld then
             root.AssemblyLinearVelocity = Vector3.new(
-                root.AssemblyLinearVelocity.X, 48, root.AssemblyLinearVelocity.Z
+                root.AssemblyLinearVelocity.X, 55, root.AssemblyLinearVelocity.Z
             )
         end
 
@@ -1432,7 +1418,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Loop de Detecção de Brainrot
 local currentBrainrotValue = 0
 local lastNotify = 0
 local lastNotifiedBrainrot = nil
@@ -1448,7 +1433,6 @@ task.spawn(function()
             if not espGui or not espGui.Adornee or not espGui.Adornee:IsDescendantOf(workspace) or value > currentBrainrotValue then
                 needNewESP = true
             end
-
             if needNewESP then
                 if espGui then 
                     espGui:Destroy() 
@@ -1457,14 +1441,10 @@ task.spawn(function()
                 espGui = createBrainrotESP(best)
                 currentBrainrotValue = value
             end
-
             local brainrotId = (best.name or "") .. "|" .. (best.income or "")
-
             if value >= 10000000 and (os.clock() - lastNotify > 10) then
                 if brainrotId ~= lastNotifiedBrainrot then
                     notifyLabel.Text = "💰 " .. best.name .. " | " .. best.income
-                    
-                    -- FORÇA a parada do Auto Mode e Server Hop (CORREÇÃO PARA CELULAR)
                     if autoModeEnabled or hopActive then
                         autoModeEnabled = false
                         hopActive = false
@@ -1472,14 +1452,10 @@ task.spawn(function()
                         statusLabel.Text = "Auto: Brainrot detectado!"
                         print("[SkyHub] Brainrot detectado! Auto Mode e Server Hop desativados.")
                     end
-                    
                     notifySound:Play()
                     notifyLabel:TweenPosition(UDim2.new(0, 0, 0, 10), "Out", "Back", 0.5, true)
-                    
                     sendBrainrotToDiscord(best)
-                    
                     lastNotifiedBrainrot = brainrotId
-                    
                     task.delay(5, function()
                         if notifyLabel then
                             notifyLabel:TweenPosition(UDim2.new(0, 0, 0, -40), "In", "Quad", 0.5, true)
@@ -1497,12 +1473,35 @@ task.spawn(function()
     end
 end)
 
--- Input Events
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if scriptRunning and infJumpEnabled then
+        if input.KeyCode == Enum.KeyCode.Space then
+            spaceHeld = true
+        end
+    end
+    -- Tecla T para TP to Best manual
+    if scriptRunning and input.KeyCode == Enum.KeyCode.T then
+        print("[SkyHub] Tecla T pressionada - Teleportando para melhor brainrot!")
+        task.spawn(function()
+            teleportToBestBrainrot()
+        end)
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if scriptRunning and infJumpEnabled then
+        if input.KeyCode == Enum.KeyCode.Space then
+            spaceHeld = false
+        end
+    end
+end)
+
 UserInputService.JumpRequest:Connect(function()
     if scriptRunning and infJumpEnabled then
         spaceHeld = true
         task.wait(0.1)
-        spaceHeld = false
     end
 end)
 
@@ -1517,7 +1516,6 @@ UserInputService.InputBegan:Connect(function(i, g)
     end
 end)
 
--- Loop de Atualização da Lista
 task.spawn(function()
     while scriptRunning do
         atualizarLista()
@@ -1525,55 +1523,18 @@ task.spawn(function()
     end
 end)
 
--- Inicialização Final
 drag(mainFrame)
 drag(toggleBall)
 drag(selectorFrame)
 drag(hopFrame)
+drag(tpButton)
 
 loadSettings()
 loadBlacklist()
 createKickWidget()
-
--- Inicializa o Anti-Bee & Anti-Disco (SEMPRE ATIVO)
 initAntiBeeDisco()
 
--- ===== MODIFICAÇÃO: Desativa e ativa Anti-Ragdoll SOMENTE após o teleporte =====
--- Salva a função original de teleporte
-local originalTeleportToBestBrainrot = teleportToBestBrainrot
-
--- Sobrescreve a função de teleporte
-function teleportToBestBrainrot()
-    local result = originalTeleportToBestBrainrot()
-    
-    -- Se o teleporte foi bem sucedido
-    if result then
-        task.wait(0.5) -- Aguarda meio segundo após o teleporte
-        
-        print("[SkyHub] Teleporte realizado! Reiniciando Anti-Ragdoll...")
-        
-        -- Desativa se estiver ativo
-        if antiRagdollEnabled then
-            disableAntiRagdoll()
-            task.wait(0.1)
-        end
-        
-        -- Ativa novamente
-        antiRagdollEnabled = true
-        handleToggle(ragBtn, ragCirc, true)
-        enableAntiRagdoll()
-        saveSettings()
-        
-        print("[SkyHub] Anti-Ragdoll reiniciado após teleporte!")
-    end
-    
-    return result
-end
--- ===== FIM DA MODIFICAÇÃO =====
-
--- Execução automática do TP to Best (SEMPRE ATIVO)
 local function autoTpToBest()
-    -- tpToBestEnabled agora é sempre true
     if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
         player.CharacterAdded:Wait()
         task.wait(1)
@@ -1582,7 +1543,6 @@ local function autoTpToBest()
     teleportToBestBrainrot()
 end
 
--- Sempre executa o TP to Best
 task.spawn(autoTpToBest)
 
 player.CharacterAdded:Connect(function()
@@ -1634,4 +1594,126 @@ toggleMenu()
 
 print("[SkyHub] Carregado com sucesso - TP to Best SEMPRE ATIVO!")
 print("[SkyHub] Anti-Bee & Anti-Disco ATIVADO permanentemente!")
-print("[SkyHub] Anti-Ragdoll será reiniciado automaticamente APÓS cada teleporte!")
+print("[SkyHub] Infinity Jump CORRIGIDO - Agora é só SEGURAR ESPAÇO para voar!")
+print("[SkyHub] Teleporte agora alinha personagem e CÂMERA de FRENTE para a base!")
+print("[SkyHub] Bases 1-4 (OESTE) -> Personagem e câmera virados para OESTE (offset -0.8)")
+print("[SkyHub] Bases 5-8 (LESTE) -> Personagem e câmera virados para LESTE (offset +0.8)")
+print("[SkyHub] Botão TP to Best adicionado ao lado esquerdo da nuvem! Tecla T também funciona!")
+
+-- ============================================================
+-- X-RAY SYSTEM OTIMIZADO (Paredes Transparentes - SEM LAG)
+-- ============================================================
+
+local XRAY_CONFIG = {
+    ENABLED = true,
+    TRANSPARENCY = 0.85,
+    SCAN_DELAY = 2,
+}
+
+local xrayActive = false
+local originalTransparencies = {}
+local xrayConnection = nil
+local lastScanTime = 0
+
+local function isBaseWall(part)
+    if not part:IsA("BasePart") then return false end
+    if not (part.Anchored and part.CanCollide) then return false end
+    
+    local partName = part.Name:lower()
+    local parentName = part.Parent and part.Parent.Name:lower() or ""
+    
+    return partName:find("base") or parentName:find("base") or
+           partName:find("wall") or parentName:find("wall") or
+           partName:find("fence") or parentName:find("fence") or
+           partName:find("barrier") or parentName:find("barrier") or
+           partName:find("plot") or parentName:find("plot")
+end
+
+local function applyXRay(part)
+    if not part or not part.Parent then return false end
+    if not isBaseWall(part) then return false end
+    
+    if not originalTransparencies[part] then
+        originalTransparencies[part] = part.LocalTransparencyModifier
+    end
+    
+    part.LocalTransparencyModifier = XRAY_CONFIG.TRANSPARENCY
+    return true
+end
+
+local function scanAndApply()
+    if not XRAY_CONFIG.ENABLED then return end
+    
+    local now = tick()
+    if now - lastScanTime < XRAY_CONFIG.SCAN_DELAY then return end
+    lastScanTime = now
+    
+    local count = 0
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if applyXRay(obj) then
+            count = count + 1
+        end
+    end
+end
+
+local function restoreAll()
+    for part, original in pairs(originalTransparencies) do
+        if part and part.Parent then
+            part.LocalTransparencyModifier = original
+        end
+    end
+    originalTransparencies = {}
+end
+
+local function enableXRay()
+    if xrayActive then return end
+    
+    xrayActive = true
+    XRAY_CONFIG.ENABLED = true
+    
+    scanAndApply()
+    
+    if xrayConnection then xrayConnection:Disconnect() end
+    xrayConnection = RunService.Heartbeat:Connect(scanAndApply)
+    
+    print("[X-Ray] ✅ Ativado (sem lag)")
+end
+
+local function disableXRay()
+    if not xrayActive then return end
+    
+    xrayActive = false
+    XRAY_CONFIG.ENABLED = false
+    
+    if xrayConnection then
+        xrayConnection:Disconnect()
+        xrayConnection = nil
+    end
+    
+    restoreAll()
+    print("[X-Ray] ❌ Desativado")
+end
+
+task.spawn(function()
+    if not game:IsLoaded() then game.Loaded:Wait() end
+    task.wait(2)
+    enableXRay()
+end)
+
+getgenv().XRay = {
+    enable = enableXRay,
+    disable = disableXRay,
+    setTransparency = function(level)
+        XRAY_CONFIG.TRANSPARENCY = math.clamp(level, 0, 1)
+        if xrayActive then
+            for part in pairs(originalTransparencies) do
+                if part and part.Parent then
+                    part.LocalTransparencyModifier = XRAY_CONFIG.TRANSPARENCY
+                end
+            end
+        end
+    end,
+    getStatus = function() return { active = xrayActive, transparency = XRAY_CONFIG.TRANSPARENCY } end
+}
+
+print("[X-Ray] Sistema X-Ray carregado e ATIVO automaticamente!")
